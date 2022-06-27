@@ -36,7 +36,7 @@ struct GoldenSample : public Managed{
 
 __device__ int CheckBoxConstraintViolation(float *after, float *before, int dim_of_input);
 
-__global__ void InitializeGoldenSearch(GoldenSample *g_info, SampleInfo *info, float *newton_seq, float *mcmpc_seq, int *indices, IndexStructure *idx);
+__global__ void InitializeGoldenSearch(GoldenSample *g_info, SampleInfo *info, float *newton_seq, float *mcmpc_seq, float cost_mc, int *indices, IndexStructure *idx);
 // __global__ void CopyFirstGuessInfoToWorstSample(SampleInfo *info, float *mcmpc_seq, int *indices, IndexStructure *idx);
 // __global__ void CopyLeftBoundaryPoint(GoldenSample *g_sample, float *newton_seq; IndexStructure *idx);
 // __global__ void OverwriteInputSequences(float *input_sequences, GoldenSample *g_sample, int *indices, IndexStructure *idx);
@@ -63,7 +63,7 @@ public:
     golden_section_search(const golden_section_search& old);
     golden_section_search& operator=(const golden_section_search &old);
     
-    void ExeGoldenSectionSearch( float &cost_value, float *newton_input_seq, float *mcmpc_input_seq, SampleInfo *sample, int *indices, float *_state, float *_param, float *_ref, float *_cnstrnt, float *_weight);
+    void ExeGoldenSectionSearch( float &cost_value, float &cost_ref, float *newton_input_seq, float *mcmpc_input_seq, SampleInfo *sample, int *indices, float *_state, float *_param, float *_ref, float *_cnstrnt, float *_weight);
     void SetupGoldenSample( );
 };
 #endif

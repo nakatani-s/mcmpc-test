@@ -56,7 +56,7 @@ golden_section_search& golden_section_search::operator=(const golden_section_sea
 }
 
 
-void golden_section_search::ExeGoldenSectionSearch( float &cost_value, float *newton_input_seq, float *mcmpc_input_seq, SampleInfo *sample, int *indices, float *_state, float *_param, float *_ref, float *_cnstrnt, float *_weight)
+void golden_section_search::ExeGoldenSectionSearch( float &cost_value, float &cost_ref, float *newton_input_seq, float *mcmpc_input_seq, SampleInfo *sample, int *indices, float *_state, float *_param, float *_ref, float *_cnstrnt, float *_weight)
 {
     gss_input_id = 0;
     gss_id_vec_id = 0;
@@ -74,7 +74,7 @@ void golden_section_search::ExeGoldenSectionSearch( float &cost_value, float *ne
             gss_id_vec_id += 1;
         }
     }
-    InitializeGoldenSearch<<<gss_h_idx->elite_sample_size, gss_h_idx->input_by_horizon>>>(g_sample, sample, copy_newton_sequences, copy_mcmpc_sequences, copy_indices, gss_d_idx);
+    InitializeGoldenSearch<<<gss_h_idx->elite_sample_size, gss_h_idx->input_by_horizon>>>(g_sample, sample, copy_newton_sequences, copy_mcmpc_sequences, cost_ref, copy_indices, gss_d_idx);
     CHECK( cudaDeviceSynchronize() );
 
     // printf("!!!!!!! golden_section_search called  %d !!!!!!!\n", gss_indices_h_vec[hst_idx->elite_sample_size -1]);
@@ -136,12 +136,13 @@ __device__ int CheckBoxConstraintViolation(float *after, float *before, int dim_
     return flag;
 }
 
-__global__ void InitializeGoldenSearch(GoldenSample *g_info, SampleInfo *info, float *newton_seq, float *mcmpc_seq, int *indices, IndexStructure *idx)
+__global__ void InitializeGoldenSearch(GoldenSample *g_info, SampleInfo *info, float *newton_seq, float *mcmpc_seq, float cost_mc, int *indices, IndexStructure *idx)
 {
     if(blockIdx.x == 0)
     {
         int worst_id = indices[idx->elite_sample_size - 1];
         info[worst_id].input[threadIdx.x] = mcmpc_seq[threadIdx.x];
+        if(threadIdx.x == 0) info[worst_id].cost = cost_mc;
     }
     if(blockIdx.x < idx->elite_sample_size)
     {
@@ -335,14 +336,17 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
                     {
                         if(iter < idx->golden_search_iteration - 1)
                         {
-                            info[info_id].input[input_index] = g_sample[blockIdx.x].input_right[input_index];
+                            if( g_sample[blockIdx.x].cost_right > info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_right[input_index];
+                            if( g_sample[blockIdx.x].cost_right <= info[info_id].cost ) info[info_id].input[input_index] = g_sample[blockIdx.x].input_right[input_index];
                         }else{
-                            g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_left[input_index];                            
+                            if( g_sample[blockIdx.x].cost_right > info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = info[info_id].input[input_index];
+                            if( g_sample[blockIdx.x].cost_right <= info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_left[input_index];                            
                             g_sample[blockIdx.x].cost_limit = g_sample[blockIdx.x].cost_left;
                         }
                         input_index += 1;
                     }
-                    cost_vec[blockIdx.x] = g_sample[blockIdx.x].cost_left;
+                    if( g_sample[blockIdx.x].cost_right > info[info_id].cost ) cost_vec[blockIdx.x] = info[info_id].cost;
+                    if( g_sample[blockIdx.x].cost_right <= info[info_id].cost ) cost_vec[blockIdx.x] = g_sample[blockIdx.x].cost_left;
                 }
             }
         }
