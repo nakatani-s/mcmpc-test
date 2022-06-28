@@ -325,12 +325,19 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
                         if(iter < idx->golden_search_iteration - 1 ){
                             g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_left[input_index];
                         }else{
-                            g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_right[input_index];
+                            if( g_sample[blockIdx.x].cost_right < info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_right[input_index];
+                            if(g_sample[blockIdx.x].cost_right > info[info_id].cost) g_sample[blockIdx.x].input_limit[input_index] = info[info_id].input[input_index];
                             g_sample[blockIdx.x].cost_limit = g_sample[blockIdx.x].cost_right;                             
                         }
                         input_index += 1;
                     }
-                    cost_vec[blockIdx.x] = g_sample[blockIdx.x].cost_right;
+                    if( g_sample[blockIdx.x].cost_right > info[info_id].cost ){
+                        cost_vec[blockIdx.x] = info[info_id].cost;
+                        g_sample[blockIdx.x].cost_limit = info[info_id].cost;
+                    }else{
+                        cost_vec[blockIdx.x] = g_sample[blockIdx.x].cost_right;
+                        g_sample[blockIdx.x].cost_limit = g_sample[blockIdx.x].cost_right;
+                    }
                 }else{
                     while(input_index < idx->input_by_horizon)
                     {
@@ -345,8 +352,14 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
                         }
                         input_index += 1;
                     }
-                    if( g_sample[blockIdx.x].cost_right > info[info_id].cost ) cost_vec[blockIdx.x] = info[info_id].cost;
-                    if( g_sample[blockIdx.x].cost_right <= info[info_id].cost ) cost_vec[blockIdx.x] = g_sample[blockIdx.x].cost_left;
+                    if( g_sample[blockIdx.x].cost_right > info[info_id].cost )
+                    {
+                        cost_vec[blockIdx.x] = info[info_id].cost;
+                        g_sample[blockIdx.x].cost_limit = info[info_id].cost;
+                    }else{
+                        cost_vec[blockIdx.x] = g_sample[blockIdx.x].cost_left;
+                        g_sample[blockIdx.x].cost_limit = g_sample[blockIdx.x].cost_left;
+                    }
                 }
             }
         }
