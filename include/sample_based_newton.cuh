@@ -51,10 +51,10 @@ private:
     int block_size_qc_regression;
     float *coe_matrix, *b_vector, *tensort_x, *tensort_l;
 
+    int golden_section_search_flag;
 public:
     sample_based_newton_method(); // Constructor
     ~sample_based_newton_method(); //Destoructor
-
 
     float cost_value_newton, cost_value_newton_after_gss;
     float *sbnewton_input_sequences;

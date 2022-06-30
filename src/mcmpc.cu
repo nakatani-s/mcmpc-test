@@ -20,6 +20,8 @@ mcmpc::mcmpc()
     cooling_method = NOTHING; // デフォルトの冷却方式（冷却なし）
     ref_type = TIME_INVARIANT; // デフォルト
 
+    cumsum_cost = 0.0f;
+
     /***** Setup IndexStructure Structure *****/ 
     hst_idx = (IndexStructure*)malloc(sizeof(IndexStructure));
     SetupIndicesSampleBasedNewton(hst_idx);
@@ -170,6 +172,11 @@ void mcmpc::Set(ReferenceType method, ValueType type)
     if(type == SET_REFERENCE_TYPE && ref_type != method) ref_type = method;
 }
 
+void mcmpc::Set(StepWidthDecisiveMethod method, ValueType type)
+{
+    if(type == SET_STEP_WIDTH_ADJUSTING_METHOD) line_search = method;
+}
+
 void mcmpc::ExecuteMPC(float *current_input)
 {
     clock_t start_t, stop_t;
@@ -188,6 +195,7 @@ void mcmpc::ExecuteMPC(float *current_input)
         current_input[i] = mcmpc_input_sequences[i];
     }
     printf("----- Ended %d -th control & optimization loop -----\n", time_steps);
+    cumsum_cost += cost_value_mcmpc / hst_idx->horizon;
     time_steps++;
 }
 
@@ -276,7 +284,7 @@ void mcmpc::WriteDataToFile( )
         }
     }
 
-    fprintf(fp_cost, "%f %f %f\n", current_time, cost_value_mcmpc, all_time / CLOCKS_PER_SEC);
+    fprintf(fp_cost, "%f %f %f %f\n", current_time, cost_value_mcmpc, cumsum_cost, all_time / CLOCKS_PER_SEC);
 
     for(int i = 0; i < hst_idx->dim_of_input; i++)
     {
@@ -311,7 +319,7 @@ void mcmpc::WriteDataToFile(float *_input)
         }
     }
 
-    fprintf(fp_cost, "%f %f %f\n", current_time, cost_value_mcmpc, all_time / CLOCKS_PER_SEC);
+    fprintf(fp_cost, "%f %f %f %f\n", current_time, cost_value_mcmpc, cumsum_cost, all_time / CLOCKS_PER_SEC);
 
     for(int i = 0; i < hst_idx->dim_of_input; i++)
     {

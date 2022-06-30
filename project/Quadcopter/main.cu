@@ -13,17 +13,19 @@
 
 int main(int argc, char **argv)
 {
-    // mcmpc myMPC;
-    sample_based_newton_method myMPC;
+    mcmpc myMPC;
+    // sample_based_newton_method myMPC;
 
     // Optional settings
     myMPC.Set(HYPERBOLIC, SET_COOLING_METHOD);
-    myMPC.Set(TIME_VARIANT , SET_REFERENCE_TYPE);
+    myMPC.Set(TIME_INVARIANT , SET_REFERENCE_TYPE);
+    // myMPC.Set(GOLDEN_SECTION, SET_STEP_WIDTH_ADJUSTING_METHOD);
     // 
     float thrust_max = 230.0 * 230.0;
 
     float state[OCP_SETTINGS::DIM_OF_STATE] = {1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0};
     float u[OCP_SETTINGS::DIM_OF_INPUT] = {9.8066, 0.0, 0.0, 0.0};
+    float plot_u[OCP_SETTINGS::DIM_OF_INPUT] = { };
     float param[OCP_SETTINGS::DIM_OF_PARAMETER] = {9.806650, 150.0, 230.0,thrust_max, 5.0, 4.0e-6, 0.0085, 0.008, 0.0165, 1.0, 0.5};
     float constraint[OCP_SETTINGS::DIM_OF_CONSTRAINTS] = {-0.2, 0.2, -20.0, 20.0, 0.0, 25.0};
     float weight_matrix[OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX] = { };
@@ -39,9 +41,9 @@ int main(int argc, char **argv)
     weight_matrix[6] = 1.0;
     weight_matrix[7] = 1.0;
     weight_matrix[8] = 1.0;
-    weight_matrix[9] = 50.0;
-    weight_matrix[10] = 50.0;
-    weight_matrix[11] = 50.0;
+    weight_matrix[9] = 100.0;
+    weight_matrix[10] = 100.0;
+    weight_matrix[11] = 100.0;
     // Set weight matrix R for input
     weight_matrix[12] = 0.1;
     weight_matrix[13] = 0.1;
@@ -71,9 +73,19 @@ int main(int argc, char **argv)
             reference[3] += 0.25;
             myMPC.Set(reference, SET_REFERENCE);
         }
-
-        myMPC.WriteDataToFile( );
-        // myMPC.WriteDataToFile( u );
+        if(600 <= t && t < 610)
+        {
+            reference[1] -= 0.25;
+            reference[2] -= 0.25;
+            reference[3] -= 0.25;
+            myMPC.Set(reference, SET_REFERENCE);
+        }
+        plot_u[0] = param[1] + u[0] - u[2] + u[3];
+        plot_u[1] = param[1] + u[0] + u[2] + u[3];
+        plot_u[2] = param[1] + u[0] + u[1] - u[3];
+        plot_u[3] = param[1] + u[0] - u[1] - u[3];
+        // myMPC.WriteDataToFile( );
+        myMPC.WriteDataToFile( plot_u );
     }
    
 }

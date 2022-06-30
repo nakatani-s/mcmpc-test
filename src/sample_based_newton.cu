@@ -63,6 +63,8 @@ sample_based_newton_method::sample_based_newton_method()
     newton_h_indices_vec = indices_dev_vec;
     block_size_qc_regression = CountBlocks(hst_idx->sample_size_for_fitting, hst_idx->thread_per_block);
 
+    golden_section_search_flag = 0;
+    mcmpc::line_search = NOT_SETTING;
 }
 
 sample_based_newton_method::~sample_based_newton_method()
@@ -113,12 +115,12 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
 
     // Compute coe_matrix() = tensort_x^T * tensort_x 
     CHECK_CUBLAS( cublasSgemm(cublasH, trans_no, trans, colunm_x, colunm_x, row_x, &alpha, tensort_x, colunm_x, tensort_x, colunm_x, &beta, coe_matrix, row_c), "Failed to cublasDgemm for [coe_matrix]" );
-    CHECK( cudaDeviceSynchronize());
+    // CHECK( cudaDeviceSynchronize());
     // sprintf(mat_name, "C");
     // printMatrix(row_c, row_c, coe_matrix, row_c, mat_name);
     // Compute tensort_l = transpose(tensort_x) * b_vector
     CHECK_CUBLAS(cublasSgemm(cublasH, trans_no, trans, colunm_x, 1, row_x, &alpha, tensort_x, colunm_x, b_vector, 1, &beta, tensort_l, row_c), "Failed to cublasSgemm for [tensort_l]" );
-    CHECK(cudaDeviceSynchronize());
+    // CHECK(cudaDeviceSynchronize());
 
     if(time_steps == 0)
     {
@@ -164,14 +166,15 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
     printf("----- Cost value of Sample-based Newton method == %f ----\n",cost_value_newton);
     
     cost_value_newton_after_gss = cost_value_newton;
-    golden_section_search::ExeGoldenSectionSearch( cost_value_newton_after_gss, cost_value_mcmpc, sbnewton_input_sequences, mcmpc_input_sequences, sample, 
-                                                thrust::raw_pointer_cast(newton_h_indices_vec.data()), _state, _param, _ref, _cnstrnt, _weight);
-    // if(cost_value_mcmpc < cost_value_newton )
-    // {
-    //     golden_section_search::ExeGoldenSectionSearch( cost_value_newton_after_gss, sbnewton_input_sequences, mcmpc_input_sequences, sample, 
-    //                                                                                 thrust::raw_pointer_cast(newton_h_indices_vec.data()), _state, _param, _ref, _cnstrnt, _weight);
-    // }
-    printf("----- Cost value of Sample-based Newton method after golden search == %f ----\n",cost_value_newton);
+    if(line_search == GOLDEN_SECTION)
+    {
+        golden_section_search::ExeGoldenSectionSearch( cost_value_newton_after_gss, cost_value_mcmpc, sbnewton_input_sequences, mcmpc_input_sequences, sample, 
+                                                    thrust::raw_pointer_cast(newton_h_indices_vec.data()), _state, _param, _ref, _cnstrnt, _weight);
+        printf("----- Cost value of Sample-based Newton method after golden search == %f ----\n",cost_value_newton);
+    }
+    
+    
+    // printf("----- Cost value of Sample-based Newton method after golden search == %f ----\n",cost_value_newton);
     stop_t = clock();
     all_time = stop_t - start_t;
     printf("*** Computation time of Sample-based Newton method = [%f] ***\n", all_time / CLOCKS_PER_SEC);
@@ -182,7 +185,8 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
 void sample_based_newton_method::SelectOptimalSolution( float *current_input )
 {
     if(cost_value_newton <= cost_value_mcmpc || cost_value_newton_after_gss <= cost_value_mcmpc){
-        if(cost_value_newton_after_gss == cost_value_mcmpc) cost_value_newton_after_gss -= 1e-4;
+        // if(cost_value_newton_after_gss == cost_value_mcmpc) cost_value_newton_after_gss -= 1e-4;
+        golden_section_search_flag = 1;
         SetInputSequences<<<hst_idx->input_by_horizon, 1>>>(mcmpc_input_sequences, sbnewton_input_sequences);
         CHECK( cudaDeviceSynchronize() );
         for(int i = 0; i < hst_idx->dim_of_input; i++)
@@ -190,12 +194,15 @@ void sample_based_newton_method::SelectOptimalSolution( float *current_input )
             current_input[i] = mcmpc_input_sequences[i];
         }
         printf("*** Newton method superior than MCMPC ***\n");
+        cumsum_cost += cost_value_newton_after_gss / hst_idx->horizon;
     }else{
+        golden_section_search_flag = 0;
         for(int i = 0; i < hst_idx->dim_of_input; i++)
         {
             current_input[i] = mcmpc_input_sequences[i];
         }
         printf("*** SB-Newton method inferior than MCMPC ***\n");
+        cumsum_cost += cost_value_mcmpc / hst_idx->horizon;
     }
 }
 
@@ -214,8 +221,14 @@ void sample_based_newton_method::WriteDataToFile( )
         }
     }
 
-    fprintf(fp_cost, "%f %f %f %f %f\n", current_time, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, all_time / CLOCKS_PER_SEC);
-    // printf("---------- Saved cost Infromation ---------\n");
+    if(line_search == GOLDEN_SECTION)
+    {
+        if(cost_value_mcmpc < cost_value_newton_after_gss) fprintf(fp_cost, "%f %f %f %f %f %f %d %f\n", current_time, cost_value_mcmpc, cumsum_cost, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, golden_section_search_flag, all_time / CLOCKS_PER_SEC);
+        if(cost_value_newton_after_gss <= cost_value_mcmpc) fprintf(fp_cost, "%f %f %f %f %f %f %d %f\n", current_time, cost_value_newton_after_gss, cumsum_cost, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, golden_section_search_flag, all_time / CLOCKS_PER_SEC);
+    }else{
+        if(cost_value_mcmpc < cost_value_newton_after_gss) fprintf(fp_cost, "%f %f %f %f %f %f %d %f\n", current_time, cost_value_mcmpc, cumsum_cost, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, golden_section_search_flag, all_time / CLOCKS_PER_SEC);
+        if(cost_value_newton_after_gss <= cost_value_mcmpc) fprintf(fp_cost, "%f %f %f %f %f %f %d %f\n", current_time, cost_value_newton_after_gss, cumsum_cost, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, golden_section_search_flag, all_time / CLOCKS_PER_SEC);
+    }
 
     for(int i = 0; i < hst_idx->dim_of_input; i++)
     {
@@ -250,7 +263,15 @@ void sample_based_newton_method::WriteDataToFile(float *_input)
         }
     }
 
-    fprintf(fp_cost, "%f %f %f %f %f\n", current_time, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, all_time / CLOCKS_PER_SEC);
+    if(line_search == GOLDEN_SECTION)
+    {
+        if(cost_value_mcmpc < cost_value_newton_after_gss) fprintf(fp_cost, "%f %f %f %f %f %f %d %f\n", current_time, cost_value_mcmpc, cumsum_cost, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, golden_section_search_flag, all_time / CLOCKS_PER_SEC);
+        if(cost_value_newton_after_gss <= cost_value_mcmpc) fprintf(fp_cost, "%f %f %f %f %f %f %d %f\n", current_time, cost_value_newton_after_gss, cumsum_cost, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, golden_section_search_flag, all_time / CLOCKS_PER_SEC);
+    }else{
+        if(cost_value_mcmpc < cost_value_newton_after_gss) fprintf(fp_cost, "%f %f %f %f %f %f %d %f\n", current_time, cost_value_mcmpc, cumsum_cost, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, golden_section_search_flag, all_time / CLOCKS_PER_SEC);
+        if(cost_value_newton_after_gss <= cost_value_mcmpc) fprintf(fp_cost, "%f %f %f %f %f %f %d %f\n", current_time, cost_value_newton_after_gss, cumsum_cost, cost_value_mcmpc, cost_value_newton, cost_value_newton_after_gss, golden_section_search_flag, all_time / CLOCKS_PER_SEC);
+    }
+    
 
     for(int i = 0; i < hst_idx->dim_of_input; i++)
     {

@@ -13,17 +13,18 @@
 
 int main(int argc, char **argv)
 {
-    // mcmpc myMPC;
-    sample_based_newton_method myMPC;
+    mcmpc myMPC;
+    // sample_based_newton_method myMPC;
 
     // Optional settings
     myMPC.Set(HYPERBOLIC, SET_COOLING_METHOD);
     myMPC.Set(TIME_INVARIANT , SET_REFERENCE_TYPE);
+    // myMPC.Set(GOLDEN_SECTION, SET_STEP_WIDTH_ADJUSTING_METHOD);
     // 
     float p[2] = {0.024f, 0.2f};
     float Jp = p[0] * pow(p[1], 2) / 3.0f;
 
-    float state[OCP_SETTINGS::DIM_OF_STATE] = {0.0f, 0.0f, M_PI, 0.0f};
+    float state[OCP_SETTINGS::DIM_OF_STATE] = {0.0f, 0.0f, M_PI + 0.01f, 0.0f};
     float u[OCP_SETTINGS::DIM_OF_INPUT] = {0.0f};
     float param[OCP_SETTINGS::DIM_OF_PARAMETER] = {0.1f, 0.024f, 0.2f, Jp, 1.265f, 1e-7, 9.80665f};
     float constraint[OCP_SETTINGS::DIM_OF_CONSTRAINTS] = {-1.0, 1.0, -0.5, 0.5};

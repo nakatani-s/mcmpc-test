@@ -13,8 +13,8 @@
 #include "../../include/mcmpc_toolkit.cuh"
 
 const int OCP_SETTINGS::SIMULATION_STEPS        = 500;
-const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 35;
-const float OCP_SETTINGS::PREDICTION_INTERVAL   = 0.7f;
+const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 32;
+const float OCP_SETTINGS::PREDICTION_INTERVAL   = 0.8f;
 const float OCP_SETTINGS::CONTROL_CYCLE         = 0.02f;
 const int OCP_SETTINGS::DIM_OF_STATE            = 4;
 const int OCP_SETTINGS::DIM_OF_INPUT            = 1;
@@ -27,7 +27,7 @@ const int OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX    = 5;
 /*****  *****/ 
 const int CONTROLLER_PARAM::NUM_OF_SAMPLE                 = 9000;
 const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 100;
-const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 1;
+const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 3;
 const float CONTROLLER_PARAM::VARIANCE                      = 1.0f;
 
 
@@ -47,7 +47,7 @@ const float OPTIONAL_PARAM::BARIIER_RHO             = 1e-4;
 const float OPTIONAL_PARAM::BARIIER_TAU             = 1e-2;
 const float OPTIONAL_PARAM::BARIIER_MAX             = 1e7;
 
-const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 50;
+const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 5;
 
 /***** DYNAMIC MODEL REPRESENTING STATE TRANSITION dot{x} = "f(x,u,t,p)" *****/
 __host__ __device__ void DynamicalModel(float *dx, float *x, float *u, float *param)
