@@ -115,9 +115,11 @@ float GetCostValue(float *input, float *state, float *param, float *ref, float *
         stage_cost = GetStageCostTerm(simulate_input, simulate_state, simulate_ref, weight);
 
         total_cost += stage_cost;
-        if(isnan(log_barrier_term))
+        if(isnan(log_barrier_term) || isinf(log_barrier_term))
         {
             total_cost += idx->barrier_max;
+        }else if(total_cost - log_barrier_term < 0){
+            total_cost += 1e-2 * idx->rho;
         }else{
             total_cost += idx->barrier_tau * idx->rho * log_barrier_term;
         }
@@ -188,6 +190,8 @@ __global__ void ParallelMonteCarloSimulation(SampleInfo *info, float *cost_vec, 
             if(isnan(log_barrier_term))
             {
                 total_cost += idx->barrier_max;
+            }else if(total_cost - log_barrier_term < 0){
+                total_cost += 1e-2 * idx->rho;
             }else{
                 total_cost += idx->barrier_tau * idx->rho * log_barrier_term;
             }

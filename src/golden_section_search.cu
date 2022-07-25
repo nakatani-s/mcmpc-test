@@ -225,6 +225,8 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
                     if(isnan(barrier_term) || isinf(barrier_term))
                     {
                         g_sample[blockIdx.x].cost_left += idx->barrier_max;
+                    }else if(g_sample[blockIdx.x].cost_left - barrier_term < 0){
+                        g_sample[blockIdx.x].cost_left += 1e-2 * idx->rho;
                     }else{
                         g_sample[blockIdx.x].cost_left += idx->barrier_tau * idx->rho * barrier_term;
                     }
@@ -265,7 +267,10 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
                     if(isnan(barrier_term) || isinf(barrier_term))
                     {
                         g_sample[blockIdx.x].cost_right += idx->barrier_max;
-                    }else{
+                    }else if(g_sample[blockIdx.x].cost_right - barrier_term < 0){
+                        g_sample[blockIdx.x].cost_right += 1e-2 * idx->rho;
+                    }
+                    else{
                         g_sample[blockIdx.x].cost_right += idx->barrier_tau * idx->rho * barrier_term;
                     }
                 }

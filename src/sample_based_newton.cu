@@ -170,7 +170,7 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
     {
         golden_section_search::ExeGoldenSectionSearch( cost_value_newton_after_gss, cost_value_mcmpc, sbnewton_input_sequences, mcmpc_input_sequences, sample, 
                                                     thrust::raw_pointer_cast(newton_h_indices_vec.data()), _state, _param, _ref, _cnstrnt, _weight);
-        printf("----- Cost value of Sample-based Newton method after golden search == %f ----\n",cost_value_newton);
+        printf("----- Cost value of Sample-based Newton method after golden search == %f ----\n",cost_value_newton_after_gss);
     }
     
     

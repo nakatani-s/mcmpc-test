@@ -31,7 +31,12 @@ __global__ void GetTensortMatrices(float *matrix, float *vector, float *mean, fl
         int forward_id;
         int backward_id;
         row_idx = id * idx->size_of_quadrtic_curve;
-        vector[id] = info[sample_id].cost / idx->sample_size_for_fitting;
+
+        float denominator = idx->lambda_gain * info[indices[idx->size_of_quadrtic_curve - 1]].cost;
+        float fitting_weight = exp(-info[sample_id].cost / denominator);
+        float f_weight = sqrt(fitting_weight);
+
+        vector[id] = f_weight *  info[sample_id].cost / idx->sample_size_for_fitting;
 
         for(int i = 0; i < idx->horizon; i++)
         {
@@ -44,7 +49,8 @@ __global__ void GetTensortMatrices(float *matrix, float *vector, float *mean, fl
                         {
                             forward_id = i * idx->dim_of_input + j;
                             backward_id = k * idx->dim_of_input + h;
-                            matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
+                            // matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
+                            matrix[row_idx + next_indices] = f_weight * (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
                             next_indices += 1;
                         }
                     }else{
@@ -52,7 +58,8 @@ __global__ void GetTensortMatrices(float *matrix, float *vector, float *mean, fl
                         {
                             forward_id = i * idx->dim_of_input + j;
                             backward_id = k * idx->dim_of_input + h;
-                            matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
+                            // matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
+                            matrix[row_idx + next_indices] = f_weight * (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
                             next_indices += 1;
                         }
                     }
@@ -65,12 +72,14 @@ __global__ void GetTensortMatrices(float *matrix, float *vector, float *mean, fl
             for(int j = 0; j < idx->dim_of_input; j++)
             {
                 forward_id = i * idx->dim_of_input + j;
-                matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]);
+                // matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]);
+                matrix[row_idx + next_indices] = f_weight * (info[sample_id].input[forward_id] - mean[forward_id]);
                 next_indices += 1;
             }
         }
 
-        matrix[row_idx + next_indices] = 1.0;
+        // matrix[row_idx + next_indices] = 1.0;
+        matrix[row_idx + next_indices] = f_weight;
     }
     
 }
