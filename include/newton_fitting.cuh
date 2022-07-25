@@ -19,7 +19,7 @@ __global__ void GetTensortMatrices(float *matrix, float *vector, float *mean, fl
 __global__ void GetHessinaAndGradient(float *hessian, float *gradient, float *lsm_result_vec, IndexStructure *idx);
 __global__ void ComputeNewtonStep(float *ans, float *current_guess, float *newton_step);
 
-__global__ void GetNegativeEigenValue(int *indicator, float *eigen_value, IndexStructure *idx);
+__global__ void GetEigenValueInfo(int *indicator, float *diag_matrix, float *eigen_value, IndexStructure *idx);
 __global__ void ResetTensortMatrices(float *matrix, SampleInfo *info, int *indices, IndexStructure *idx);
 __global__ void GetMeanAbsoluteError(float *mae, float *prev_value, SampleInfo *info, int *indices, IndexStructure *idx);
 __global__ void GetMeanSquareError(float *mse, float *prev_value, SampleInfo *info, int *indices, IndexStructure *idx);

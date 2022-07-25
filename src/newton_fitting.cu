@@ -134,8 +134,9 @@ __global__ void ComputeNewtonStep(float *ans, float *current_guess, float *newto
     ans[id] = current_guess[id] + newton_step[id];
 }
 
-__global__ void GetNegativeEigenValue(int *indicator, float *eigen_value, IndexStructure *idx)
+__global__ void GetEigenValueInfo(int *indicator, float *diag_matrix, float *eigen_value, IndexStructure *idx)
 {
+    unsigned int mat_id = threadIdx.x + blockIdx.x * blockDim.x;
     int row_idx;
     if(threadIdx.x == blockIdx.x)
     {
@@ -145,7 +146,10 @@ __global__ void GetNegativeEigenValue(int *indicator, float *eigen_value, IndexS
             indicator[row_idx] = 1;
         }else{
             indicator[row_idx] = 0;
-        } 
+        }
+        diag_matrix[mat_id] = eigen_value[row_idx];
+    }else{
+        diag_matrix[mat_id] = 0.0f;
     }
 }
 

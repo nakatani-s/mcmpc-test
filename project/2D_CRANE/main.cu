@@ -20,6 +20,7 @@ int main(int argc, char **argv)
     myMPC.Set(HYPERBOLIC, SET_COOLING_METHOD);
     myMPC.Set(TIME_INVARIANT , SET_REFERENCE_TYPE);
     myMPC.Set(GOLDEN_SECTION, SET_STEP_WIDTH_ADJUSTING_METHOD);
+    myMPC.Set(EIGEN_VALUE_DECOM, SET_SOLVER);
     // 
 
     float state[OCP_SETTINGS::DIM_OF_STATE] = {-2.0f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f};

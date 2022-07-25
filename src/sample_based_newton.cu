@@ -182,10 +182,11 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
                 CHECK(cudaMalloc((void**)&ws_hsvd_ops, sizeof(float) * hsvd_work_size) );
             }
             CHECK_CUSOLVER( cusolverDnSsyevd(cusolverH, jobz, uplo, row_h, hessian, row_h, eigen_value, ws_hsvd_ops, hsvd_work_size, cu_info), "Failed to decompose singular value of Hesian" );
-            GetNegativeEigenValue<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(thrust::raw_pointer_cast(eigen_dev_vec.data()), eigen_value, dev_idx);
+            GetEigenValueInfo<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(thrust::raw_pointer_cast(eigen_dev_vec.data()), diag_matrix, eigen_value, dev_idx);
             CHECK( cudaDeviceSynchronize() );
             thrust::inclusive_scan(eigen_dev_vec.begin(), eigen_dev_vec.end(), eigen_dev_vec.begin());
             eigen_hst_vec = eigen_dev_vec;
+            printf("num of negative eigen values = %d\n", eigen_hst_vec[hst_idx->input_by_horizon - 1]);
 
             CHECK_CUBLAS( cublasSgemm(cublasH, trans_no, trans_no, row_h, row_h, row_h, &alpha, hessian, row_h, diag_matrix, row_h, &beta, orth_matrix, row_h), "Failed to compute  inverse matrix 1st operation" );
             CHECK_CUBLAS( cublasSgemm(cublasH, trans_no, trans, row_h, row_h, row_h, &alpha, orth_matrix, row_h, hessian, row_h, &beta, diag_matrix, row_h), "Failed to compute inv(2.0*Hessian)" );
@@ -395,6 +396,22 @@ void sample_based_newton_method::WriteDataToFile(float *_input)
             fprintf(fp_input, "%f\n", _input[i]);
         }else{
             fprintf(fp_input, "%f ", _input[i]);
+        }
+    }
+
+    if(solver_type == EIGEN_VALUE_DECOM)
+    {
+        int regression_id = floor(hst_idx->sample_size_for_fitting / 10) - 1;
+        float den_r = regression_error_hst_vec[hst_idx->sample_size_for_fitting - 1];
+        if(0 < eigen_hst_vec[hst_idx->input_by_horizon - 1]){
+            fprintf(fp_fitting_accuracy, "%f %d %f ", current_time, 1, regression_accuracy);
+        }else{
+            fprintf(fp_fitting_accuracy, "%f %d %f ", current_time, 0, regression_accuracy);
+        }
+        for(int i = 0; i < 9; i++)
+        {
+            if(i < 8) fprintf(fp_fitting_accuracy, "%f ", regression_error_hst_vec[(i+1)*regression_id] / den_r);
+            if(i == 8) fprintf(fp_fitting_accuracy, "%f\n", regression_error_hst_vec[(i+1)*regression_id] / den_r);
         }
     }
 }
