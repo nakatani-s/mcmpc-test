@@ -132,6 +132,68 @@ float GetCostValue(float *input, float *state, float *param, float *ref, float *
     return total_cost;
 }
 
+void GetCostValueNewton(float &cost, int &check, float *input, float *state, float *param, float *ref, float *cnstrnt, float *weight, IndexStructure *idx)
+{
+    int input_leading_id, ref_leading_id;
+    float stage_cost = 0.0f;
+    float total_cost = 0.0f;
+    float log_barrier_term = 0.0f;
+    float delta_time = idx->prediction_interval / idx->horizon;
+    float *simulate_d_state, *simulate_input, *simulate_state, *simulate_ref;
+    simulate_d_state = (float *)malloc(sizeof(float) * idx->dim_of_state);
+    simulate_state = (float *)malloc(sizeof(float) * idx->dim_of_state);
+    simulate_input = (float *)malloc(sizeof(float) * idx->dim_of_input);
+    simulate_ref = (float *)malloc(sizeof(float) * idx->dim_of_reference);
+
+    for(int i = 0; i < idx->dim_of_state; i++)
+    {
+        simulate_state[i] = state[i];
+    }
+
+    check = 0;
+    // 評価値を計算するためのシミュレーションのループ
+    for(int t = 0; t < idx->horizon; t++)
+    {
+        input_leading_id = t * idx->dim_of_input;
+        ref_leading_id = t * idx->dim_of_reference;
+        for(int input_id = 0; input_id < idx->dim_of_input; input_id++)
+        {
+            simulate_input[input_id] = input[input_leading_id + input_id];
+        }
+        for(int ref_id = 0; ref_id < idx->dim_of_reference; ref_id++)
+        {
+            simulate_ref[ref_id] = ref[ref_leading_id + ref_id];
+        }
+        InputSaturation(simulate_input, cnstrnt, idx->zeta);
+        for(int input_id = 0; input_id < idx->dim_of_input; input_id++)
+        {
+            if(input[input_leading_id + input_id] != simulate_input[input_id] && check == 0) check = 1; 
+            input[input_leading_id + input_id] = simulate_input[input_id];
+        }
+        DynamicalModel(simulate_d_state, simulate_state, simulate_input, param);
+        EularIntegration(simulate_state, simulate_d_state, delta_time, idx->dim_of_state);
+
+        log_barrier_term = GetBarrierTerm(simulate_state, simulate_input, cnstrnt, idx->rho);
+        stage_cost = GetStageCostTerm(simulate_input, simulate_state, simulate_ref, weight);
+
+        total_cost += stage_cost;
+        if(isnan(log_barrier_term) || isinf(log_barrier_term))
+        {
+            total_cost += idx->barrier_max;
+        }else if(total_cost - log_barrier_term < 0){
+            total_cost += 1e-2 * idx->rho;
+        }else{
+            total_cost += idx->barrier_tau * idx->rho * log_barrier_term;
+        }
+    }
+    free(simulate_d_state);
+    free(simulate_input);
+    free(simulate_state);
+    free(simulate_ref);
+
+    cost = total_cost;
+}
+
 __global__ void ParallelMonteCarloSimulation(SampleInfo *info, float *cost_vec, int *indices, float var, float *state, float *param, float *ref, float *cnstrnt, float *weight, float *mean, curandState *seed, IndexStructure *idx)
 {
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;

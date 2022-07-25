@@ -133,3 +133,105 @@ __global__ void ComputeNewtonStep(float *ans, float *current_guess, float *newto
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
     ans[id] = current_guess[id] + newton_step[id];
 }
+
+__global__ void GetNegativeEigenValue(int *indicator, float *eigen_value, IndexStructure *idx)
+{
+    int row_idx;
+    if(threadIdx.x == blockIdx.x)
+    {
+        row_idx = threadIdx.x;
+        if(eigen_value[row_idx] < 0.0f)
+        {
+            indicator[row_idx] = 1;
+        }else{
+            indicator[row_idx] = 0;
+        } 
+    }
+}
+
+__global__ void ResetTensortMatrices(float *matrix, SampleInfo *info, int *indices, IndexStructure *idx)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    if(id < idx->sample_size_for_fitting)
+    {
+        unsigned int sample_id = indices[id];
+        unsigned int next_indices = 0;
+        unsigned int row_idx;
+        int forward_id;
+        int backward_id;
+        row_idx = id * idx->size_of_quadrtic_curve;
+
+        // float denominator = idx->lambda_gain * info[indices[idx->size_of_quadrtic_curve - 1]].cost;
+        // float fitting_weight = exp(-info[sample_id].cost / denominator);
+        // float f_weight = sqrt(fitting_weight);
+
+        for(int i = 0; i < idx->horizon; i++)
+        {
+            for(int j = 0; j < idx->dim_of_input; j++)
+            {
+                for(int k = i; k < idx->horizon; k++)
+                {
+                    if(k==i){
+                        for(int h = j; h < idx->dim_of_input; h++)
+                        {
+                            forward_id = i * idx->dim_of_input + j;
+                            backward_id = k * idx->dim_of_input + h;
+                            matrix[row_idx + next_indices] = info[sample_id].input[forward_id] * info[sample_id].input[backward_id];
+                            // matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
+                            // matrix[row_idx + next_indices] = f_weight * (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
+                            next_indices += 1;
+                        }
+                    }else{
+                        for(int h = 0; h < idx->dim_of_input; h++)
+                        {
+                            forward_id = i * idx->dim_of_input + j;
+                            backward_id = k * idx->dim_of_input + h;
+                            matrix[row_idx + next_indices] = info[sample_id].input[forward_id] * info[sample_id].input[backward_id];
+                            // matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
+                            // matrix[row_idx + next_indices] = f_weight * (info[sample_id].input[forward_id] - mean[forward_id]) * (info[sample_id].input[backward_id] - mean[backward_id]);
+                            next_indices += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        for(int i = 0; i < idx->horizon; i++)
+        {
+            for(int j = 0; j < idx->dim_of_input; j++)
+            {
+                forward_id = i * idx->dim_of_input + j;
+                matrix[row_idx + next_indices] = info[sample_id].input[forward_id];
+                // matrix[row_idx + next_indices] = (info[sample_id].input[forward_id] - mean[forward_id]);
+                // matrix[row_idx + next_indices] = f_weight * (info[sample_id].input[forward_id] - mean[forward_id]);
+                next_indices += 1;
+            }
+        }
+
+        matrix[row_idx + next_indices] = 1.0;
+        // matrix[row_idx + next_indices] = f_weight;
+    }
+    
+}
+
+__global__ void GetMeanAbsoluteError(float *mae, float *prev_value, SampleInfo *info, int *indices, IndexStructure *idx)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    if( id < idx->sample_size_for_fitting )
+    {
+        float temp_error;
+        temp_error = prev_value[id] - info[indices[id]].cost / idx->sample_size_for_fitting;
+        mae[id] = fabs(temp_error); 
+    }
+}
+
+__global__ void GetMeanSquareError(float *mse, float *prev_value, SampleInfo *info, int *indices, IndexStructure *idx)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    if(id < idx->sample_size_for_fitting)
+    {
+        float temp_error;
+        temp_error = prev_value[id] - info[indices[id]].cost / idx->sample_size_for_fitting;
+        mse[id] = temp_error * temp_error;
+    }
+}

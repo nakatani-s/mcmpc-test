@@ -36,6 +36,8 @@ public:
 
     StepWidthDecisiveMethod line_search; //
 
+    LinearEquationSolver solver_type;
+
     IndexStructure *hst_idx, *dev_idx; // ホライズン、状態・入力の次元などの情報を管理する構造体(hst_idx:=ホスト関数用, dev_idx:=デバイス関数用)
 
     thrust::device_vector<int> indices_dev_vec;
@@ -54,6 +56,7 @@ public:
     void Set(CoolingMethod method, ValueType type);
     void Set(ReferenceType method, ValueType type);
     void Set(StepWidthDecisiveMethod method, ValueType type);
+    void Set(LinearEquationSolver method, ValueType type);
     void ExecuteForwardSimulation(float *state, float *input, IntegralMethod method);
     void MonteCarloSimulation( );
     virtual void WriteDataToFile( );

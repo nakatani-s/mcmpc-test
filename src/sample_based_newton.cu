@@ -34,7 +34,7 @@ sample_based_newton_method::sample_based_newton_method()
     CHECK_CUSOLVER( cusolverDnCreate(&cusolverH), "Failed to Create cusolver handler" );
     CHECK_CUBLAS( cublasCreate(&cublasH), "Failed to create cublas handler" );
     row_x = hst_idx->sample_size_for_fitting;
-    colunm_x = hst_idx->size_of_quadrtic_curve;
+    column_x = hst_idx->size_of_quadrtic_curve;
     row_c = hst_idx->size_of_quadrtic_curve;
     row_h = hst_idx->input_by_horizon;
     alpha = 1.0f;
@@ -86,10 +86,39 @@ void sample_based_newton_method::FreeAllCudaArrayInSBNewton()
     CHECK( cudaFree( qr_tau ) );
     CHECK( cudaFree( hqr_tau ) );
     CHECK( cudaFree( cu_info ) );
+    if(solver_type == EIGEN_VALUE_DECOM) fclose(fp_fitting_accuracy);
+}
+
+void sample_based_newton_method::SetupEvaluateVariables( )
+{
+    time_t timeValue;
+    struct tm *timeObject;
+    time( &timeValue );
+    timeObject = localtime( &timeValue );
+    char filename[128];
+    sprintf(filename, "./output/data_fitting_accuracy_%d%d_%d%d.txt", timeObject->tm_mon + 1, timeObject->tm_mday, timeObject->tm_hour,timeObject->tm_min);
+    fp_fitting_accuracy = fopen(filename, "w");
+
+    CHECK( cudaMalloc((void**)&eigen_value, sizeof(float) * hst_idx->input_by_horizon) );
+    CHECK( cudaMalloc((void**)&diag_matrix, sizeof(float) * hst_idx->size_of_hessian) );
+    CHECK( cudaMalloc((void**)&orth_matrix, sizeof(float) * hst_idx->size_of_hessian) );
+    CHECK( cudaMalloc((void**)&regression_value, sizeof(float) * hst_idx->sample_size_for_fitting) );
+    jobz = CUSOLVER_EIG_MODE_VECTOR;
+    uplo_svd = CUBLAS_FILL_MODE_UPPER;
+    thrust::device_vector<int> eigen_dev_vec_temp( hst_idx->input_by_horizon );
+    eigen_hst_vec = eigen_dev_vec_temp;
+    eigen_dev_vec = eigen_hst_vec;
+    thrust::device_vector<float> regression_error_dev_vec_temp( hst_idx->sample_size_for_fitting, 0.0f );
+    regression_error_hst_vec = regression_error_dev_vec_temp;
+    regression_error_dev_vec = regression_error_hst_vec;
 }
 
 void sample_based_newton_method::ExecuteMPC(float *current_input)
 {
+    if(time_steps == 0 && solver_type == EIGEN_VALUE_DECOM)
+    {
+        SetupEvaluateVariables();
+    }
     clock_t start_t, stop_t;
     start_t = clock();
     // Execute Monte Carlo Simulation
@@ -114,12 +143,12 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
     CHECK( cudaDeviceSynchronize( ) );
 
     // Compute coe_matrix() = tensort_x^T * tensort_x 
-    CHECK_CUBLAS( cublasSgemm(cublasH, trans_no, trans, colunm_x, colunm_x, row_x, &alpha, tensort_x, colunm_x, tensort_x, colunm_x, &beta, coe_matrix, row_c), "Failed to cublasDgemm for [coe_matrix]" );
+    CHECK_CUBLAS( cublasSgemm(cublasH, trans_no, trans, column_x, column_x, row_x, &alpha, tensort_x, column_x, tensort_x, column_x, &beta, coe_matrix, row_c), "Failed to cublasDgemm for [coe_matrix]" );
     // CHECK( cudaDeviceSynchronize());
     // sprintf(mat_name, "C");
     // printMatrix(row_c, row_c, coe_matrix, row_c, mat_name);
     // Compute tensort_l = transpose(tensort_x) * b_vector
-    CHECK_CUBLAS(cublasSgemm(cublasH, trans_no, trans, colunm_x, 1, row_x, &alpha, tensort_x, colunm_x, b_vector, 1, &beta, tensort_l, row_c), "Failed to cublasSgemm for [tensort_l]" );
+    CHECK_CUBLAS(cublasSgemm(cublasH, trans_no, trans, column_x, 1, row_x, &alpha, tensort_x, column_x, b_vector, 1, &beta, tensort_l, row_c), "Failed to cublasSgemm for [tensort_l]" );
     // CHECK(cudaDeviceSynchronize());
 
     if(time_steps == 0)
@@ -141,26 +170,89 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
     GetHessinaAndGradient<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(hessian, gradient, tensort_l, dev_idx);
     CHECK( cudaDeviceSynchronize( ) );
 
-    if(time_steps == 0)
-    {
-        CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, row_h, row_h, hessian, row_h, &geqrf_work_size), "Failed to get buffersize of [Hessian] (1st step)" );
-        CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
-        hqr_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
-        CHECK( cudaMalloc(&ws_hqr_ops, sizeof(float) * hqr_work_size) );
+    switch(solver_type){
+        case EIGEN_VALUE_DECOM:
+            if(time_steps == 0)
+            {
+                CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, row_h, row_h, hessian, row_h, &geqrf_work_size), "Failed to get buffersize of [Hessian]<=1" );
+                CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
+                hqr_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
+                CHECK( cudaMalloc((void**)&ws_hqr_ops, sizeof(float) * hqr_work_size) );
+                CHECK_CUSOLVER( cusolverDnSsyevd_bufferSize(cusolverH,jobz, uplo, row_h, hessian, row_h, eigen_value, &hsvd_work_size), "Faile to get buffersize of [Hessian]<=>1");
+                CHECK(cudaMalloc((void**)&ws_hsvd_ops, sizeof(float) * hsvd_work_size) );
+            }
+            CHECK_CUSOLVER( cusolverDnSsyevd(cusolverH, jobz, uplo, row_h, hessian, row_h, eigen_value, ws_hsvd_ops, hsvd_work_size, cu_info), "Failed to decompose singular value of Hesian" );
+            GetNegativeEigenValue<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(thrust::raw_pointer_cast(eigen_dev_vec.data()), eigen_value, dev_idx);
+            CHECK( cudaDeviceSynchronize() );
+            thrust::inclusive_scan(eigen_dev_vec.begin(), eigen_dev_vec.end(), eigen_dev_vec.begin());
+            eigen_hst_vec = eigen_dev_vec;
+
+            CHECK_CUBLAS( cublasSgemm(cublasH, trans_no, trans_no, row_h, row_h, row_h, &alpha, hessian, row_h, diag_matrix, row_h, &beta, orth_matrix, row_h), "Failed to compute  inverse matrix 1st operation" );
+            CHECK_CUBLAS( cublasSgemm(cublasH, trans_no, trans, row_h, row_h, row_h, &alpha, orth_matrix, row_h, hessian, row_h, &beta, diag_matrix, row_h), "Failed to compute inv(2.0*Hessian)" );
+            CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, row_h, row_h, diag_matrix, row_h, hqr_tau, ws_hqr_ops, hqr_work_size, cu_info),"Failed to compute QR factorization of Hessain" );
+            CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, row_h, nrhs, row_h, diag_matrix, row_h, hqr_tau, gradient, row_h, ws_hqr_ops, hqr_work_size, cu_info), "Failed to compute Q^T*B of Hessian" );
+            CHECK_CUBLAS( cublasStrsm(cublasH, side, uplo_svd, trans_no, cub_diag, row_h, nrhs, &m_alpha, diag_matrix, row_h, gradient, row_h), "Failed to compute X = R^-1Q^T*B" );
+            ComputeNewtonStep<<<hst_idx->input_by_horizon, 1>>>(sbnewton_input_sequences, mcmpc_input_sequences, gradient);
+            CHECK( cudaDeviceSynchronize() );
+
+            // 回帰超２次超曲面における予測評価値を元のサンプルの評価値の昇順にregResultsVecに格納して評価する
+            ResetTensortMatrices<<<block_size_qc_regression, thread_per_block>>>(tensort_x, sample, thrust::raw_pointer_cast(indices_dev_vec.data()), dev_idx);
+            CHECK( cudaDeviceSynchronize() );
+            CHECK_CUBLAS( cublasSgemm(cublasH, trans,  trans_no, column_x, 1, column_x, &alpha, tensort_x, column_x, tensort_l, column_x, &beta, regression_value, column_x), "Failed to compute predictive cost value !" );
+
+#ifdef MEAN_ABSOLUTE_ERROR
+            GetMeanAbsoluteError<<<block_size_qc_regression, thread_per_block>>>(thrust::raw_pointer_cast(regression_error_dev_vec.data()), regression_value, sample, thrust::raw_pointer_cast(indices_dev_vec.data()), dev_idx);
+            CHECK( cudaDeviceSynchronize() );
+            thrust::inclusive_scan(regression_error_dev_vec.begin(), regression_error_dev_vec.end(), regression_error_dev_vec.begin());
+            regression_error_hst_vec = regression_error_dev_vec;
+            regression_accuracy = regression_error_hst_vec[hst_idx->sample_size_for_fitting - 1] / hst_idx->sample_size_for_fitting;
+#else
+            GetMeanSquareError<<<block_size_qc_regression, thread_per_block>>>(thrust::raw_pointer_cast(regression_error_dev_vec.data()), regression_value, sample, thrust::raw_pointer_cast(indices_dev_vec.data()), dev_idx);
+            CHECK( cudaDeviceSynchronize() );
+            thrust::inclusive_scan(regression_error_dev_vec.begin(), regression_error_dev_vec.end(), regression_error_dev_vec.begin());
+            regression_error_hst_vec = regression_error_dev_vec;
+            regression_accuracy = sqrt( regression_error_hst_vec[hst_idx->sample_size_for_fitting - 1] / hst_idx->sample_size_for_fitting );
+#endif
+            break;
+        case QR_DECOM:
+            if(time_steps == 0)
+            {
+                CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, row_h, row_h, hessian, row_h, &geqrf_work_size), "Failed to get buffersize of [Hessian] (1st step)" );
+                CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
+                hqr_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
+                CHECK( cudaMalloc(&ws_hqr_ops, sizeof(float) * hqr_work_size) );
+            }
+            CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, row_h, row_h, hessian, row_h, hqr_tau, ws_hqr_ops, hqr_work_size, cu_info),"Failed to compute QR factorization of Hessain" );
+            CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, ws_hqr_ops, hqr_work_size, cu_info), "Failed to compute Q^T*B of Hessian" )
+            CHECK_CUBLAS( cublasStrsm(cublasH, side, uplo_qr, trans_no, cub_diag, row_h, nrhs, &m_alpha, hessian, row_h, gradient, row_h), "Failed to compute X = R^-1Q^T*B" );
+            ComputeNewtonStep<<<hst_idx->input_by_horizon, 1>>>(sbnewton_input_sequences, mcmpc_input_sequences, gradient);
+            CHECK( cudaDeviceSynchronize() );
+            break;
+        default:
+            break;
     }
-    // Execute QR decomposition to get inv(Hessian)  ==>  Q = lower triangular of coe_matrix
-    CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, row_h, row_h, hessian, row_h, hqr_tau, ws_hqr_ops, hqr_work_size, cu_info),"Failed to compute QR factorization of Hessain" );
+    // if(time_steps == 0)
+    // {
+    //     CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, row_h, row_h, hessian, row_h, &geqrf_work_size), "Failed to get buffersize of [Hessian] (1st step)" );
+    //     CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
+    //     hqr_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
+    //     CHECK( cudaMalloc(&ws_hqr_ops, sizeof(float) * hqr_work_size) );
+    // }
+    // // Execute QR decomposition to get inv(Hessian)  ==>  Q = lower triangular of coe_matrix
+    // CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, row_h, row_h, hessian, row_h, hqr_tau, ws_hqr_ops, hqr_work_size, cu_info),"Failed to compute QR factorization of Hessain" );
 
-    // Compute transpose(Q) * B for compute Ans (inv(Hessian) * Gradient) = inv(R) * transpose(Q) * B by QR decomposition
-    CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, ws_hqr_ops, hqr_work_size, cu_info), "Failed to compute Q^T*B of Hessian" )
+    // // Compute transpose(Q) * B for compute Ans (inv(Hessian) * Gradient) = inv(R) * transpose(Q) * B by QR decomposition
+    // CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, ws_hqr_ops, hqr_work_size, cu_info), "Failed to compute Q^T*B of Hessian" )
 
-    // Compute estimated input sequences = inv(R) * transpose(Q) * B
-    CHECK_CUBLAS( cublasStrsm(cublasH, side, uplo_qr, trans_no, cub_diag, row_h, nrhs, &m_alpha, hessian, row_h, gradient, row_h), "Failed to compute X = R^-1Q^T*B" );
+    // // Compute estimated input sequences = inv(R) * transpose(Q) * B
+    // CHECK_CUBLAS( cublasStrsm(cublasH, side, uplo_qr, trans_no, cub_diag, row_h, nrhs, &m_alpha, hessian, row_h, gradient, row_h), "Failed to compute X = R^-1Q^T*B" );
 
-    ComputeNewtonStep<<<hst_idx->input_by_horizon, 1>>>(sbnewton_input_sequences, mcmpc_input_sequences, gradient);
-    CHECK( cudaDeviceSynchronize() );
+    // ComputeNewtonStep<<<hst_idx->input_by_horizon, 1>>>(sbnewton_input_sequences, mcmpc_input_sequences, gradient);
+    // CHECK( cudaDeviceSynchronize() );
 
-    cost_value_newton = GetCostValue(sbnewton_input_sequences, _state, _param, _ref, _cnstrnt, _weight, hst_idx);
+    // cost_value_newton = GetCostValue(sbnewton_input_sequences, _state, _param, _ref, _cnstrnt, _weight, hst_idx);
+
+    GetCostValueNewton(cost_value_newton, check_violate_constraint, sbnewton_input_sequences, _state, _param, _ref, _cnstrnt, _weight, hst_idx);
 
     printf("----- End Sample-based Newton Step Calculation -----\n");
     printf("----- Cost value of Sample-based Newton method == %f ----\n",cost_value_newton);
@@ -244,6 +336,22 @@ void sample_based_newton_method::WriteDataToFile( )
             fprintf(fp_input, "%f\n", mcmpc_input_sequences[i]);
         }else{
             fprintf(fp_input, "%f ", mcmpc_input_sequences[i]);
+        }
+    }
+
+    if(solver_type == EIGEN_VALUE_DECOM)
+    {
+        int regression_id = floor(hst_idx->sample_size_for_fitting / 10) - 1;
+        float den_r = regression_error_hst_vec[hst_idx->sample_size_for_fitting - 1];
+        if(0 < eigen_hst_vec[hst_idx->input_by_horizon - 1]){
+            fprintf(fp_fitting_accuracy, "%f %d %f ", current_time, 1, regression_accuracy);
+        }else{
+            fprintf(fp_fitting_accuracy, "%f %d %f ", current_time, 0, regression_accuracy);
+        }
+        for(int i = 0; i < 9; i++)
+        {
+            if(i < 8) fprintf(fp_fitting_accuracy, "%f ", regression_error_hst_vec[(i+1)*regression_id] / den_r);
+            if(i == 8) fprintf(fp_fitting_accuracy, "%f\n", regression_error_hst_vec[(i+1)*regression_id] / den_r);
         }
     }
 }

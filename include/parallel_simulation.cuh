@@ -17,6 +17,7 @@
 unsigned int CountBlocks(unsigned int a, unsigned int b);
 
 float GetCostValue(float *input, float *state, float *param, float *ref, float *cnstrnt, float *weight, IndexStructure *idx);
+void GetCostValueNewton(float &cost, int &check, float *input, float *state, float *param, float *ref, float *cnstrnt, float *weight, IndexStructure *idx);
 
 __device__ float GenerateRadomInput(unsigned int id, curandState *seed, float mean, float variance);
 

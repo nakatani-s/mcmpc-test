@@ -19,6 +19,7 @@ mcmpc::mcmpc()
     time_steps = 0; // 時刻の初期化
     cooling_method = NOTHING; // デフォルトの冷却方式（冷却なし）
     ref_type = TIME_INVARIANT; // デフォルト
+    solver_type = QR_DECOM; // デフォルト
 
     cumsum_cost = 0.0f;
 
@@ -175,6 +176,11 @@ void mcmpc::Set(ReferenceType method, ValueType type)
 void mcmpc::Set(StepWidthDecisiveMethod method, ValueType type)
 {
     if(type == SET_STEP_WIDTH_ADJUSTING_METHOD) line_search = method;
+}
+
+void mcmpc::Set(LinearEquationSolver method, ValueType type)
+{
+    if(type == SET_SOLVER) solver_type = method;
 }
 
 void mcmpc::ExecuteMPC(float *current_input)
