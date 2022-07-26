@@ -27,7 +27,7 @@ const int OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX    = 8;
 /*****  *****/ 
 const int CONTROLLER_PARAM::NUM_OF_SAMPLE                 = 9000;
 const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 100;
-const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 2;
+const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 1;
 const float CONTROLLER_PARAM::VARIANCE                      = 1.25f;
 
 
@@ -38,7 +38,7 @@ const float OPTIONAL_PARAM::LAMBDA_GAIN             = 2e-1;
 /***** PARAMETERS FOR SAMPLE-BASED NEWTON METHOD *****/
 const int OPTIONAL_PARAM::NUM_OF_NEWTON_ITERATION   = 1;
 const float OPTIONAL_PARAM::SBNEWTON_VARIANCE       = 1.2f;
-const int OPTIONAL_PARAM::MAX_DIVISOR               = 200;
+const int OPTIONAL_PARAM::MAX_DIVISOR               = 100;
 
 const float OPTIONAL_PARAM::COOLING_RATE            = 0.98f;
 

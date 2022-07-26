@@ -232,26 +232,6 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
         default:
             break;
     }
-    // if(time_steps == 0)
-    // {
-    //     CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, row_h, row_h, hessian, row_h, &geqrf_work_size), "Failed to get buffersize of [Hessian] (1st step)" );
-    //     CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
-    //     hqr_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
-    //     CHECK( cudaMalloc(&ws_hqr_ops, sizeof(float) * hqr_work_size) );
-    // }
-    // // Execute QR decomposition to get inv(Hessian)  ==>  Q = lower triangular of coe_matrix
-    // CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, row_h, row_h, hessian, row_h, hqr_tau, ws_hqr_ops, hqr_work_size, cu_info),"Failed to compute QR factorization of Hessain" );
-
-    // // Compute transpose(Q) * B for compute Ans (inv(Hessian) * Gradient) = inv(R) * transpose(Q) * B by QR decomposition
-    // CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, row_h, nrhs, row_h, hessian, row_h, hqr_tau, gradient, row_h, ws_hqr_ops, hqr_work_size, cu_info), "Failed to compute Q^T*B of Hessian" )
-
-    // // Compute estimated input sequences = inv(R) * transpose(Q) * B
-    // CHECK_CUBLAS( cublasStrsm(cublasH, side, uplo_qr, trans_no, cub_diag, row_h, nrhs, &m_alpha, hessian, row_h, gradient, row_h), "Failed to compute X = R^-1Q^T*B" );
-
-    // ComputeNewtonStep<<<hst_idx->input_by_horizon, 1>>>(sbnewton_input_sequences, mcmpc_input_sequences, gradient);
-    // CHECK( cudaDeviceSynchronize() );
-
-    // cost_value_newton = GetCostValue(sbnewton_input_sequences, _state, _param, _ref, _cnstrnt, _weight, hst_idx);
 
     GetCostValueNewton(cost_value_newton, check_violate_constraint, sbnewton_input_sequences, _state, _param, _ref, _cnstrnt, _weight, hst_idx);
 
@@ -344,10 +324,18 @@ void sample_based_newton_method::WriteDataToFile( )
     {
         int regression_id = floor(hst_idx->sample_size_for_fitting / 10) - 1;
         float den_r = regression_error_hst_vec[hst_idx->sample_size_for_fitting - 1];
+        int check_other_constraint = 0;
+        if(cost_value_newton - 1.001 * hst_idx->barrier_max > 0) check_other_constraint += 1;
         if(0 < eigen_hst_vec[hst_idx->input_by_horizon - 1]){
-            fprintf(fp_fitting_accuracy, "%f %d %f ", current_time, 1, regression_accuracy);
+            if(check_violate_constraint == 0 && check_other_constraint == 0) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 1, 0, 0, 0, regression_accuracy);
+            if(check_violate_constraint == 0 && check_other_constraint == 1) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 1, 0, 1, 0, regression_accuracy);
+            if(check_violate_constraint == 1 && check_other_constraint == 0) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 1, 1, 0, 0, regression_accuracy);
+            if(check_violate_constraint == 1 && check_other_constraint == 1) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 1, 0, 0, 1, regression_accuracy);
         }else{
-            fprintf(fp_fitting_accuracy, "%f %d %f ", current_time, 0, regression_accuracy);
+            if(check_violate_constraint == 0 && check_other_constraint == 0) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 0, 0, 0, 0, regression_accuracy);
+            if(check_violate_constraint == 0 && check_other_constraint == 1) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 0, 0, 1, 0, regression_accuracy);
+            if(check_violate_constraint == 1 && check_other_constraint == 0) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 0, 1, 0, 0, regression_accuracy);
+            if(check_violate_constraint == 1 && check_other_constraint == 1) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 0, 0, 0, 1, regression_accuracy);
         }
         for(int i = 0; i < 9; i++)
         {
@@ -403,10 +391,18 @@ void sample_based_newton_method::WriteDataToFile(float *_input)
     {
         int regression_id = floor(hst_idx->sample_size_for_fitting / 10) - 1;
         float den_r = regression_error_hst_vec[hst_idx->sample_size_for_fitting - 1];
+        int check_other_constraint = 0;
+        if(cost_value_newton - 1.001 * hst_idx->barrier_max > 0) check_other_constraint += 1;
         if(0 < eigen_hst_vec[hst_idx->input_by_horizon - 1]){
-            fprintf(fp_fitting_accuracy, "%f %d %f ", current_time, 1, regression_accuracy);
+            if(check_violate_constraint == 0 && check_other_constraint == 0) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 1, 0, 0, 0, regression_accuracy);
+            if(check_violate_constraint == 0 && check_other_constraint == 1) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 1, 0, 1, 0, regression_accuracy);
+            if(check_violate_constraint == 1 && check_other_constraint == 0) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 1, 1, 0, 0, regression_accuracy);
+            if(check_violate_constraint == 1 && check_other_constraint == 1) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 1, 0, 0, 1, regression_accuracy);
         }else{
-            fprintf(fp_fitting_accuracy, "%f %d %f ", current_time, 0, regression_accuracy);
+            if(check_violate_constraint == 0 && check_other_constraint == 0) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 0, 0, 0, 0, regression_accuracy);
+            if(check_violate_constraint == 0 && check_other_constraint == 1) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 0, 0, 1, 0, regression_accuracy);
+            if(check_violate_constraint == 1 && check_other_constraint == 0) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 0, 1, 0, 0, regression_accuracy);
+            if(check_violate_constraint == 1 && check_other_constraint == 1) fprintf(fp_fitting_accuracy, "%f %d %d %d %d %f ", current_time, 0, 0, 0, 1, regression_accuracy);
         }
         for(int i = 0; i < 9; i++)
         {
