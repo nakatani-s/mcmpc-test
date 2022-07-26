@@ -13,3 +13,4 @@
 #include "data_structures.cuh"
 #include "mcmpc.cuh"
 #include "sample_based_newton.cuh"
+#include "savitzky_golay_filter.cuh"

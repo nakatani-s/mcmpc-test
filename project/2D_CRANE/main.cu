@@ -15,6 +15,7 @@ int main(int argc, char **argv)
 {
     // mcmpc myMPC;
     sample_based_newton_method myMPC;
+    savitzky_golay_filter sgFilter;
 
     // Optional settings
     myMPC.Set(HYPERBOLIC, SET_COOLING_METHOD);
@@ -45,6 +46,8 @@ int main(int argc, char **argv)
     for(int t = 0; t < OCP_SETTINGS::SIMULATION_STEPS; t++)
     {
         myMPC.ExecuteMPC( u );
+
+        sgFilter.Smoothing(u, myMPC.sbnewton_input_sequences);
 
         myMPC.ExecuteForwardSimulation(state, u, RUNGE_KUTTA_45);
         if(abs(state[0]-reference[0]) < 0.05f && abs(state[2]-reference[2]) < 0.05f) counter += 1;
