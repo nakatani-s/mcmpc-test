@@ -168,7 +168,7 @@ void GetCostValueNewton(float &cost, int &check, float *input, float *state, flo
         for(int input_id = 0; input_id < idx->dim_of_input; input_id++)
         {
             if(input[input_leading_id + input_id] != simulate_input[input_id] && check == 0) check = 1; 
-            input[input_leading_id + input_id] = simulate_input[input_id];
+            // input[input_leading_id + input_id] = simulate_input[input_id];
         }
         DynamicalModel(simulate_d_state, simulate_state, simulate_input, param);
         EularIntegration(simulate_state, simulate_d_state, delta_time, idx->dim_of_state);

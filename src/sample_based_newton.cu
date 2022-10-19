@@ -65,11 +65,21 @@ sample_based_newton_method::sample_based_newton_method()
 
     golden_section_search_flag = 0;
     mcmpc::line_search = NOT_SETTING;
+
+    // printf("before prepare thrust vectors\n");
+    // thrust::device_vector<int> eigen_dev_vec_temp( hst_idx->input_by_horizon );
+    // printf("before prepare thrust vectors 2\n");
+    // eigen_hst_vec = eigen_dev_vec_temp;
+    // eigen_dev_vec = eigen_hst_vec;
+    // thrust::device_vector<float> regression_error_dev_vec_temp( hst_idx->sample_size_for_fitting, 0.0f );
+    // regression_error_hst_vec = regression_error_dev_vec_temp;
+    // regression_error_dev_vec = regression_error_hst_vec;
 }
 
 sample_based_newton_method::~sample_based_newton_method()
 {
     FreeAllCudaArrayInSBNewton();
+    printf("Called Destroctor of sample-bese Newton type optimization !!!\n");
 }
 
 void sample_based_newton_method::FreeAllCudaArrayInSBNewton()
@@ -86,7 +96,14 @@ void sample_based_newton_method::FreeAllCudaArrayInSBNewton()
     CHECK( cudaFree( qr_tau ) );
     CHECK( cudaFree( hqr_tau ) );
     CHECK( cudaFree( cu_info ) );
-    if(solver_type == EIGEN_VALUE_DECOM) fclose(fp_fitting_accuracy);
+    if(solver_type == EIGEN_VALUE_DECOM) 
+    {
+        fclose(fp_fitting_accuracy);
+        CHECK(cudaFree(eigen_value));
+        CHECK(cudaFree(diag_matrix));
+        CHECK(cudaFree(orth_matrix));
+        CHECK(cudaFree(regression_value));
+    }
 }
 
 void sample_based_newton_method::SetupEvaluateVariables( )
@@ -105,12 +122,14 @@ void sample_based_newton_method::SetupEvaluateVariables( )
     CHECK( cudaMalloc((void**)&regression_value, sizeof(float) * hst_idx->sample_size_for_fitting) );
     jobz = CUSOLVER_EIG_MODE_VECTOR;
     uplo_svd = CUBLAS_FILL_MODE_UPPER;
-    thrust::device_vector<int> eigen_dev_vec_temp( hst_idx->input_by_horizon );
-    eigen_hst_vec = eigen_dev_vec_temp;
-    eigen_dev_vec = eigen_hst_vec;
-    thrust::device_vector<float> regression_error_dev_vec_temp( hst_idx->sample_size_for_fitting, 0.0f );
-    regression_error_hst_vec = regression_error_dev_vec_temp;
-    regression_error_dev_vec = regression_error_hst_vec;
+    
+    thrust::host_vector<int> eigen_hst_vec_temp( hst_idx->input_by_horizon );
+    eigen_dev_vec = eigen_hst_vec_temp;
+    eigen_hst_vec = eigen_dev_vec;
+    // eigen_dev_vec = eigen_hst_vec;
+    thrust::host_vector<float> regression_error_hst_vec_temp( hst_idx->sample_size_for_fitting, 0.0f );
+    regression_error_dev_vec = regression_error_hst_vec_temp;
+    regression_error_hst_vec = regression_error_dev_vec;
 }
 
 void sample_based_newton_method::ExecuteMPC(float *current_input)
@@ -257,9 +276,12 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
 
 void sample_based_newton_method::SelectOptimalSolution( float *current_input )
 {
-    if(cost_value_newton <= cost_value_mcmpc || cost_value_newton_after_gss <= cost_value_mcmpc){
+    if((cost_value_newton <= cost_value_mcmpc || cost_value_newton_after_gss <= cost_value_mcmpc ) && !(isnan(cost_value_newton_after_gss))){
         // if(cost_value_newton_after_gss == cost_value_mcmpc) cost_value_newton_after_gss -= 1e-4;
+        sgf_flag = 0;
+        if(!(cost_value_newton <= cost_value_mcmpc)) sgf_flag = 1;
         golden_section_search_flag = 1;
+        if(cost_value_newton == cost_value_newton_after_gss) InputSaturation(sbnewton_input_sequences, _cnstrnt, hst_idx->zeta);
         SetInputSequences<<<hst_idx->input_by_horizon, 1>>>(mcmpc_input_sequences, sbnewton_input_sequences);
         CHECK( cudaDeviceSynchronize() );
         for(int i = 0; i < hst_idx->dim_of_input; i++)
@@ -270,6 +292,7 @@ void sample_based_newton_method::SelectOptimalSolution( float *current_input )
         cumsum_cost += cost_value_newton_after_gss / hst_idx->horizon;
     }else{
         golden_section_search_flag = 0;
+        sgf_flag = 1;
         for(int i = 0; i < hst_idx->dim_of_input; i++)
         {
             current_input[i] = mcmpc_input_sequences[i];

@@ -39,6 +39,12 @@ golden_section_search::golden_section_search( )
 golden_section_search::~golden_section_search()
 {
     CHECK(cudaFree(copy_newton_sequences));
+    CHECK(cudaFree(copy_indices));
+    CHECK(cudaFree(copy_mcmpc_sequences));
+    CHECK(cudaFree(gss_d_idx));
+    free(gss_h_idx);
+
+    printf("Called Destroctor of golden section search!!!\n");
 }
 
 golden_section_search::golden_section_search(const golden_section_search& old)
@@ -115,6 +121,8 @@ void golden_section_search::SetupGoldenSample( )
         g_sample[i].dev_state_right = gss_h_idx->dim_of_state;
         g_sample[i].dev_input_left = gss_h_idx->dim_of_input;
         g_sample[i].dev_input_right = gss_h_idx->dim_of_input;
+        g_sample[i].dev_input_left_temp = gss_h_idx->dim_of_input;
+        g_sample[i].dev_input_right_temp = gss_h_idx->dim_of_input;
         g_sample[i].dev_dstate_left = gss_h_idx->dim_of_state;
         g_sample[i].dev_dstate_right = gss_h_idx->dim_of_state;
         g_sample[i].dev_ref_left = gss_h_idx->dim_of_reference;
@@ -186,6 +194,8 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
     float delta_time = idx->prediction_interval / idx->horizon;
     const float ratio = idx->golden_ratio;
     indices[blockIdx.x] = blockIdx.x;
+
+    // if(threadIdx.x == 0) 
     if( blockIdx.x < idx->elite_sample_size ){
         for(int iter = 0; iter < idx->golden_search_iteration; iter++)
         {
@@ -210,12 +220,19 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
                     for(int k = 0; k < idx->dim_of_input; k++)
                     {
                         g_sample[blockIdx.x].dev_input_left[k] = (1 - ratio) * g_sample[blockIdx.x].input_limit[input_index] + ratio * info[info_id].input[input_index];
+                        g_sample[blockIdx.x].dev_input_left_temp[k] = g_sample[blockIdx.x].dev_input_left[k];
                         g_sample[blockIdx.x].input_left[input_index] =  g_sample[blockIdx.x].dev_input_left[k];
                         input_index += 1;
                     }
-
+                    InputSaturation(g_sample[blockIdx.x].dev_input_left.d_pointer(), cnstrnt, idx->zeta);
+                    g_sample[blockIdx.x].cv_flag = CheckBoxConstraintViolation(g_sample[blockIdx.x].dev_input_left.d_pointer(), g_sample[blockIdx.x].dev_input_left_temp.d_pointer(), idx->dim_of_input);
                     // 内側（モンテカルロ解側）の評価点がBox制約を違反した時はループを抜ける
-                    if(g_sample[blockIdx.x].cv_flag != 0) break;
+                    if(g_sample[blockIdx.x].cv_flag != 0)
+                    {
+                        g_sample[blockIdx.x].cost_left = idx->horizon * idx->barrier_max;
+                        break;
+                    } 
+                    // break;
                     
                     DynamicalModel(g_sample[blockIdx.x].dev_dstate_left.d_pointer(), g_sample[blockIdx.x].dev_state_left.d_pointer(), g_sample[blockIdx.x].dev_input_left.d_pointer(), param);
                     EularIntegration(g_sample[blockIdx.x].dev_state_left.d_pointer(), g_sample[blockIdx.x].dev_dstate_left.d_pointer(), delta_time, idx->dim_of_state);
@@ -249,15 +266,22 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
                     for(int k =0; k < idx->dim_of_input; k++)
                     {
                         g_sample[blockIdx.x].dev_input_right[k] = ratio * g_sample[blockIdx.x].input_limit[input_index] + (1 - ratio) * info[info_id].input[input_index];
-                        info[info_id].dev_input[k] = g_sample[blockIdx.x].dev_input_right[k];
+                        // info[info_id].dev_input[k] = g_sample[blockIdx.x].dev_input_right[k];
+                        g_sample[blockIdx.x].dev_input_right_temp[k] = g_sample[blockIdx.x].dev_input_right[k];
                         g_sample[blockIdx.x].input_right[input_index] = g_sample[blockIdx.x].dev_input_right[k];
                         input_index += 1;
                     }
                     InputSaturation(g_sample[blockIdx.x].dev_input_right.d_pointer(), cnstrnt, idx->zeta);
-                    g_sample[blockIdx.x].cv_flag = CheckBoxConstraintViolation(g_sample[blockIdx.x].dev_input_right.d_pointer(), info[info_id].dev_input.d_pointer(), idx->dim_of_input);
+                    // g_sample[blockIdx.x].cv_flag = CheckBoxConstraintViolation(g_sample[blockIdx.x].dev_input_right.d_pointer(), info[info_id].dev_input.d_pointer(), idx->dim_of_input);
+                    g_sample[blockIdx.x].cv_flag = CheckBoxConstraintViolation(g_sample[blockIdx.x].dev_input_right.d_pointer(), g_sample[blockIdx.x].dev_input_right_temp.d_pointer(), idx->dim_of_input);
                     
                     // 内側（モンテカルロ解側）の評価点がBox制約を違反した時はループを抜ける
-                    if(g_sample[blockIdx.x].cv_flag != 0) break;
+                    if(g_sample[blockIdx.x].cv_flag != 0)
+                    {
+                        g_sample[blockIdx.x].cost_right = idx->horizon * idx->barrier_max;
+                        break;
+                    }
+                    // break;
 
                     DynamicalModel(g_sample[blockIdx.x].dev_dstate_right.d_pointer(), g_sample[blockIdx.x].dev_state_right.d_pointer(), g_sample[blockIdx.x].dev_input_right.d_pointer(), param);
                     EularIntegration(g_sample[blockIdx.x].dev_state_right.d_pointer(), g_sample[blockIdx.x].dev_dstate_right.d_pointer(), delta_time, idx->dim_of_state);
@@ -277,7 +301,7 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
             }
             // if(blockIdx.x < 5) printf("block ID :: %d {g_sample[%d].cost_right = %f}\n", blockIdx.x, blockIdx.x, g_sample[blockIdx.x].cost_right);
             __syncthreads();
-            if(g_sample[blockIdx.x].cv_flag != 0){
+            if(g_sample[blockIdx.x].cv_flag != 0 && iter < idx->golden_search_iteration - 1){
                 if(threadIdx.x == 0)
                 {
                     input_index = 0;
@@ -348,11 +372,19 @@ __global__ void ParallelGoldenSectionSearch(float *cost_vec, int *indices, Golde
                     {
                         if(iter < idx->golden_search_iteration - 1)
                         {
-                            if( g_sample[blockIdx.x].cost_right > info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_right[input_index];
-                            if( g_sample[blockIdx.x].cost_right <= info[info_id].cost ) info[info_id].input[input_index] = g_sample[blockIdx.x].input_right[input_index];
+                            if( g_sample[blockIdx.x].cost_right > info[info_id].cost )
+                            {
+                                g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_right[input_index];
+                            } 
+                            if( g_sample[blockIdx.x].cost_right <= info[info_id].cost )
+                            {
+                                info[info_id].input[input_index] = g_sample[blockIdx.x].input_right[input_index];
+                                info[info_id].cost = g_sample[blockIdx.x].cost_right;
+                            } 
+                            // info[info_id].cost = g_sample[blockIdx.x].cost_left;
                         }else{
-                            if( g_sample[blockIdx.x].cost_right > info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = info[info_id].input[input_index];
-                            if( g_sample[blockIdx.x].cost_right <= info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_left[input_index];                            
+                            if( g_sample[blockIdx.x].cost_left > info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = info[info_id].input[input_index];
+                            if( g_sample[blockIdx.x].cost_left <= info[info_id].cost ) g_sample[blockIdx.x].input_limit[input_index] = g_sample[blockIdx.x].input_left[input_index];                            
                             g_sample[blockIdx.x].cost_limit = g_sample[blockIdx.x].cost_left;
                         }
                         input_index += 1;

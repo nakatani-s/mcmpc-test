@@ -41,22 +41,25 @@ int main(int argc, char **argv)
     myMPC.Set(reference, SET_REFERENCE);
 
     float a[7] = { };
-    int counter = 0;
+    // int counter = 0;
+    // int timer = 0;
 
     for(int t = 0; t < OCP_SETTINGS::SIMULATION_STEPS; t++)
     {
         myMPC.ExecuteMPC( u );
 
-        sgFilter.Smoothing(u, myMPC.sbnewton_input_sequences);
+        // if(myMPC.sgf_flag == 1) 
+        sgFilter.Smoothing(u, myMPC.mcmpc_input_sequences);
 
         myMPC.ExecuteForwardSimulation(state, u, RUNGE_KUTTA_45);
-        if(abs(state[0]-reference[0]) < 0.05f && abs(state[2]-reference[2]) < 0.05f) counter += 1;
+        // if(abs(state[0]-reference[0]) < 0.025f && abs(state[2]-reference[2]) < 0.025f) counter += 1;
         
-        if(counter > 500){
+        
+        /*if(t > timer * 1000){
             reference[0] = -1.0 * reference[0];
             myMPC.Set(reference, SET_REFERENCE);
-            counter = 0;
-        }
+            timer += 1;
+        }*/
 
         a[0] = state[2] * sinf(state[4]);
         a[1] = 0.2f;

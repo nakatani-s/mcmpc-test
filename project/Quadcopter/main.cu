@@ -13,13 +13,15 @@
 
 int main(int argc, char **argv)
 {
-    mcmpc myMPC;
-    // sample_based_newton_method myMPC;
+    // mcmpc myMPC;
+    sample_based_newton_method myMPC;
+    // savitzky_golay_filter sgFilter;
 
     // Optional settings
     myMPC.Set(HYPERBOLIC, SET_COOLING_METHOD);
     myMPC.Set(TIME_INVARIANT , SET_REFERENCE_TYPE);
-    // myMPC.Set(GOLDEN_SECTION, SET_STEP_WIDTH_ADJUSTING_METHOD);
+    myMPC.Set(GOLDEN_SECTION, SET_STEP_WIDTH_ADJUSTING_METHOD);
+    myMPC.Set(EIGEN_VALUE_DECOM, SET_SOLVER);
     // 
     float thrust_max = 230.0 * 230.0;
 
@@ -36,11 +38,11 @@ int main(int argc, char **argv)
     weight_matrix[1] = 1.0;
     weight_matrix[2] = 10.0;
     weight_matrix[3] = 1.0;
-    weight_matrix[4] = 50.0;
-    weight_matrix[5] = 5.0;
-    weight_matrix[6] = 1.0;
-    weight_matrix[7] = 1.0;
-    weight_matrix[8] = 1.0;
+    weight_matrix[4] = 20.0;
+    weight_matrix[5] = 2.0;
+    weight_matrix[6] = 10.0;
+    weight_matrix[7] = 10.0;
+    weight_matrix[8] = 10.0;
     weight_matrix[9] = 100.0;
     weight_matrix[10] = 100.0;
     weight_matrix[11] = 100.0;
@@ -62,23 +64,30 @@ int main(int argc, char **argv)
     {
         myMPC.ExecuteMPC( u );
 
+        // sgFilter.Smoothing(u, myMPC.mcmpc_input_sequences);
+
         myMPC.ExecuteForwardSimulation(state, u, RUNGE_KUTTA_45);
 
         myMPC.Set(state, SET_STATE);
 
-        if(300 <= t && t < 310)
+        // if(300 <= t && t < 310)
+        // {
+        //     reference[1] += 0.25;
+        //     reference[2] += 0.25;
+        //     reference[3] += 0.25;
+        //     myMPC.Set(reference, SET_REFERENCE);
+        // }
+        // if(600 <= t && t < 610)
+        // {
+        //     reference[1] -= 0.25;
+        //     reference[2] -= 0.25;
+        //     reference[3] -= 0.25;
+        //     myMPC.Set(reference, SET_REFERENCE);
+        // }
+        if(t == 400)
         {
-            reference[1] += 0.25;
-            reference[2] += 0.25;
-            reference[3] += 0.25;
-            myMPC.Set(reference, SET_REFERENCE);
-        }
-        if(600 <= t && t < 610)
-        {
-            reference[1] -= 0.25;
-            reference[2] -= 0.25;
-            reference[3] -= 0.25;
-            myMPC.Set(reference, SET_REFERENCE);
+            state[1] += 1.0;
+            state[7] += 20.0;
         }
         plot_u[0] = param[1] + u[0] - u[2] + u[3];
         plot_u[1] = param[1] + u[0] + u[2] + u[3];

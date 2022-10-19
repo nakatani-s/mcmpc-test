@@ -76,6 +76,7 @@ public:
     sample_based_newton_method(); // Constructor
     ~sample_based_newton_method(); //Destoructor
 
+    int sgf_flag;
     float cost_value_newton, cost_value_newton_after_gss;
     float *sbnewton_input_sequences;
 

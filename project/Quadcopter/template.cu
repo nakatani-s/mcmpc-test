@@ -13,8 +13,8 @@
 #include "../../include/mcmpc_toolkit.cuh"
 
 const int OCP_SETTINGS::SIMULATION_STEPS        = 1000;
-const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 10;
-const float OCP_SETTINGS::PREDICTION_INTERVAL   = 1.0f;
+const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 13;
+const float OCP_SETTINGS::PREDICTION_INTERVAL   = 1.2f;
 const float OCP_SETTINGS::CONTROL_CYCLE         = 0.025f;
 const int OCP_SETTINGS::DIM_OF_STATE            = 13;
 const int OCP_SETTINGS::DIM_OF_INPUT            = 4;
@@ -26,8 +26,8 @@ const int OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX    = 16;
 
 /*****  *****/ 
 const int CONTROLLER_PARAM::NUM_OF_SAMPLE                 = 9000;
-const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 50;
-const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 5;
+const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 200;
+const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 3;
 const float CONTROLLER_PARAM::VARIANCE                      = 1.25f;
 
 
@@ -37,8 +37,8 @@ const float OPTIONAL_PARAM::LAMBDA_GAIN             = 2e-1;
 
 /***** PARAMETERS FOR SAMPLE-BASED NEWTON METHOD *****/
 const int OPTIONAL_PARAM::NUM_OF_NEWTON_ITERATION   = 1;
-const float OPTIONAL_PARAM::SBNEWTON_VARIANCE       = 1.2f;
-const int OPTIONAL_PARAM::MAX_DIVISOR               = 50;
+const float OPTIONAL_PARAM::SBNEWTON_VARIANCE       = 0.25f; //
+const int OPTIONAL_PARAM::MAX_DIVISOR               = 50; // 50
 
 const float OPTIONAL_PARAM::COOLING_RATE            = 0.98f;
 
@@ -47,7 +47,7 @@ const float OPTIONAL_PARAM::BARIIER_RHO             = 1e-4;
 const float OPTIONAL_PARAM::BARIIER_TAU             = 1e-2;
 const float OPTIONAL_PARAM::BARIIER_MAX             = 1e7;
 
-const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 5;
+const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 10;
 
 /***** DYNAMIC MODEL REPRESENTING STATE TRANSITION dot{x} = "f(x,u,t,p)" *****/
 __host__ __device__ void DynamicalModel(float *dx, float *x, float *u, float *param)

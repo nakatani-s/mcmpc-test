@@ -28,6 +28,8 @@ struct GoldenSample : public Managed{
     DynamicArray dev_state_right;
     DynamicArray dev_input_left;
     DynamicArray dev_input_right;
+    DynamicArray dev_input_left_temp;
+    DynamicArray dev_input_right_temp;
     DynamicArray dev_dstate_left;
     DynamicArray dev_dstate_right;
     DynamicArray dev_ref_left;

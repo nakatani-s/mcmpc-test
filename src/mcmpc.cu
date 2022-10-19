@@ -37,8 +37,7 @@ mcmpc::mcmpc()
     printf("##### Number of Blocks == [%d] ##### \n", num_blocks);
     thread_per_block = hst_idx->thread_per_block; 
     CHECK( cudaMalloc((void**)&dev_random_seed, num_random_seed * sizeof(curandState)) );
-    SetRandomSeed<<<hst_idx->sample_size, (hst_idx->dim_of_input + 1) * hst_idx->horizon>>>(dev_random_seed, rand());
-    CHECK( cudaDeviceSynchronize() );
+    
 
     CHECK( cudaMallocManaged((void**)&_state, sizeof(float) * hst_idx->dim_of_state) );
     CHECK( cudaMallocManaged((void**)&_ref, sizeof(float) * hst_idx->dim_of_reference) );
@@ -71,6 +70,11 @@ mcmpc::mcmpc()
     fp_state = fopen(filename_state, "w");
     fp_input = fopen(filename_input, "w");
     fp_cost = fopen(filename_cost, "w");
+
+    // SetRandomSeed<<<hst_idx->sample_size, (hst_idx->dim_of_input + 1) * hst_idx->horizon>>>(dev_random_seed, rand());
+    SetRandomSeed<<<hst_idx->sample_size, (hst_idx->dim_of_input + 1) * hst_idx->horizon>>>(dev_random_seed, (int) rand() / (time_object->tm_min + 1));
+
+    CHECK( cudaDeviceSynchronize() );
     
 }
 
@@ -231,10 +235,9 @@ void mcmpc::MonteCarloSimulation()
         ParallelMonteCarloSimulation<<<num_blocks, thread_per_block>>>(sample, thrust::raw_pointer_cast(sort_key_dev_vec.data()), thrust::raw_pointer_cast(indices_dev_vec.data()),
                                                                        var, _state, _param, _ref, _cnstrnt, _weight, mcmpc_input_sequences, dev_random_seed, dev_idx);
         CHECK( cudaDeviceSynchronize() );
-        
+
         // 評価値の大小によるThrustを用いたソート
         thrust::sort_by_key(sort_key_dev_vec.begin(), sort_key_dev_vec.end(), indices_dev_vec.begin());
-        
         // ソートの結果を利用して，"エリートサンプル”の重みを取得
         GetWeightFromEliteSample<<<num_blocks, thread_per_block>>>(sample, thrust::raw_pointer_cast(weight_dev_vec.data()), dev_idx, thrust::raw_pointer_cast(indices_dev_vec.data()));
         CHECK( cudaDeviceSynchronize() );

@@ -12,13 +12,13 @@
 
 #include "../../include/mcmpc_toolkit.cuh"
 
-const int OCP_SETTINGS::SIMULATION_STEPS        = 500;
-const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 32;
-const float OCP_SETTINGS::PREDICTION_INTERVAL   = 0.8f;
+const int OCP_SETTINGS::SIMULATION_STEPS        = 750;
+const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 25;
+const float OCP_SETTINGS::PREDICTION_INTERVAL   = 0.6f;
 const float OCP_SETTINGS::CONTROL_CYCLE         = 0.02f;
 const int OCP_SETTINGS::DIM_OF_STATE            = 4;
 const int OCP_SETTINGS::DIM_OF_INPUT            = 1;
-const int OCP_SETTINGS::DIM_OF_PARAMETER        = 7;
+const int OCP_SETTINGS::DIM_OF_PARAMETER        = 10;
 const int OCP_SETTINGS::DIM_OF_REFERENCE        = 4;
 const int OCP_SETTINGS::DIM_OF_CONSTRAINTS      = 4;
 const int OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX    = 5;
@@ -26,9 +26,9 @@ const int OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX    = 5;
 
 /*****  *****/ 
 const int CONTROLLER_PARAM::NUM_OF_SAMPLE                 = 9000;
-const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 100;
-const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 3;
-const float CONTROLLER_PARAM::VARIANCE                      = 1.0f;
+const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 150;
+const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 1;
+const float CONTROLLER_PARAM::VARIANCE                      = 0.8f;
 
 
 /***** OPTIONAL PARAMETERS *****/
@@ -37,17 +37,17 @@ const float OPTIONAL_PARAM::LAMBDA_GAIN             = 2e-1;
 
 /***** PARAMETERS FOR SAMPLE-BASED NEWTON METHOD *****/
 const int OPTIONAL_PARAM::NUM_OF_NEWTON_ITERATION   = 1;
-const float OPTIONAL_PARAM::SBNEWTON_VARIANCE       = 1.0f;
-const int OPTIONAL_PARAM::MAX_DIVISOR               = 30;
+const float OPTIONAL_PARAM::SBNEWTON_VARIANCE       = 0.25f;
+const int OPTIONAL_PARAM::MAX_DIVISOR               = 50;
 
 const float OPTIONAL_PARAM::COOLING_RATE            = 0.98f;
 
-const float OPTIONAL_PARAM::BARIIER_ZETA            = 0.001f;
+const float OPTIONAL_PARAM::BARIIER_ZETA            = 0.00001f;
 const float OPTIONAL_PARAM::BARIIER_RHO             = 1e-4;
 const float OPTIONAL_PARAM::BARIIER_TAU             = 1e-2;
 const float OPTIONAL_PARAM::BARIIER_MAX             = 1e7;
 
-const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 5;
+const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 4;
 
 /***** DYNAMIC MODEL REPRESENTING STATE TRANSITION dot{x} = "f(x,u,t,p)" *****/
 __host__ __device__ void DynamicalModel(float *dx, float *x, float *u, float *param)
@@ -74,6 +74,40 @@ __host__ __device__ void DynamicalModel(float *dx, float *x, float *u, float *pa
     dx[2] = x[3]; // dth
     dx[1] = o[4] / o[8]; // ddx
     dx[3] = o[9] / o[13]; //ddthta
+
+    // if(x[0] >= param[8])
+    // {
+    //     float collide[3] = {};
+    //     float coefficient = param[9];
+    //     collide[0] = param[1] * param[2] * cos(x[2]);
+    //     collide[1] = param[3] + param[1] * powf(param[2], 2);
+    //     collide[2] = collide[0] / collide[1];
+    //     dx[2] = x[3] + (1+coefficient) * collide[2] * x[1];
+    //     // dx[2] = 0.0f;
+    //     dx[0] = -coefficient * x[1];
+    //     // dx[0] = 0.0f;
+    //     dx[1] = 0.0f/*o[4] / o[8]*/;
+    //     dx[3] = 0.0f/*o[9] / o[13]*/;
+    //     x[0] = param[8];
+    //     x[3] = x[3] + (1+coefficient) * collide[2] * x[1];
+    //     x[1] = -coefficient*x[1];
+    // }
+    // if(x[0] <= param[7])
+    // {
+    //     float collide[3] = {};
+    //     float coefficient = param[9];
+    //     collide[0] = param[1] * param[2] * cos(x[2]);
+    //     collide[1] = param[3] + param[1] * powf(param[2], 2);
+    //     collide[2] = collide[0] / collide[1];
+    //     dx[2] = x[3] + (1+coefficient) * collide[2] * x[1];
+    //     dx[0] = -coefficient * x[1];
+    //     dx[1] = 0.0f/*o[4] / o[8]*/;
+    //     dx[3] = 0.0/*o[9] / o[13]*/;
+    //     x[0] = param[7];
+    //     x[3] = x[3] + (1+coefficient) * collide[2] * x[1];
+    //     x[1] = -coefficient*x[1];
+    // }
+    
 } 
 
 /***** FOR COMPUTING STAGE COST COST *****/
