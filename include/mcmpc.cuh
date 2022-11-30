@@ -47,6 +47,7 @@ public:
     thrust::device_vector<float> weight_dev_vec;
 
     FILE *fp_state, *fp_input, *fp_cost;
+    FILE *fp_iteration; // D論用　消してよし
 
     mcmpc(); // コンストラクタ
     ~mcmpc(); // デストラクタ
@@ -62,5 +63,11 @@ public:
     virtual void WriteDataToFile( );
     virtual void WriteDataToFile(float *_input);
     void FreeAllCudaArrayInBaseClass();
+
+    // D論用　消して問題なし
+    void WriteIterationResult(int iterations);
+    void WriteIterationLast(int iteration, float *input);
+    void SetOptimal(float *opt);
+    float *_optimal;
 };
 #endif

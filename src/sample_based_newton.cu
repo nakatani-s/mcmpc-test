@@ -270,7 +270,8 @@ void sample_based_newton_method::ExecuteMPC(float *current_input)
     stop_t = clock();
     all_time = stop_t - start_t;
     printf("*** Computation time of Sample-based Newton method = [%f] ***\n", all_time / CLOCKS_PER_SEC);
-    SelectOptimalSolution( current_input );
+    SelectOptimalSolution( current_input);
+    // mcmpc::WriteIterationLast(200, sbnewton_input_sequences);
     time_steps++;
 }
 

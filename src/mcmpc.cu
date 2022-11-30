@@ -71,6 +71,12 @@ mcmpc::mcmpc()
     fp_input = fopen(filename_input, "w");
     fp_cost = fopen(filename_cost, "w");
 
+    // D論用　消して問題なし
+    char filename_iteration[128];
+    sprintf(filename_iteration, "./output/data_iteration_%d%d_%d%d.txt", time_object->tm_mon + 1, time_object->tm_mday, time_object->tm_hour, time_object->tm_min);
+    fp_iteration = fopen(filename_iteration, "w");
+    CHECK(cudaMallocManaged((void**)&_optimal, sizeof(float) * hst_idx->input_by_horizon));
+
     // SetRandomSeed<<<hst_idx->sample_size, (hst_idx->dim_of_input + 1) * hst_idx->horizon>>>(dev_random_seed, rand());
     SetRandomSeed<<<hst_idx->sample_size, (hst_idx->dim_of_input + 1) * hst_idx->horizon>>>(dev_random_seed, (int) rand() / (time_object->tm_min + 1));
 
@@ -98,6 +104,10 @@ void mcmpc::FreeAllCudaArrayInBaseClass()
     CHECK(cudaFree(_cnstrnt));
     CHECK(cudaFree(_weight));
     CHECK(cudaFree(mcmpc_input_sequences));
+
+    // D論用　消して問題なし
+    CHECK(cudaFree(_optimal));
+    fclose(fp_iteration);
 }
 
 void mcmpc::Set(float *a, ValueType type)
@@ -248,7 +258,8 @@ void mcmpc::MonteCarloSimulation()
         // cumsum_weight_hst_vec = cumsum_weight_dev_vec;
         GetWeightedAverageInParallel<<<hst_idx->dim_of_input, hst_idx->horizon>>>(mcmpc_input_sequences, sample, thrust::raw_pointer_cast(weight_dev_vec.data()),
                                                                                  thrust::raw_pointer_cast(cumsum_weight_dev_vec.data()), thrust::raw_pointer_cast(indices_dev_vec.data()), dev_idx);
-        CHECK( cudaDeviceSynchronize() );        
+        CHECK( cudaDeviceSynchronize() );
+        WriteIterationResult(iter);        
     }
 
 }
@@ -346,4 +357,39 @@ void mcmpc::WriteDataToFile(float *_input)
             fprintf(fp_input, "%f ", _input[i]);
         }
     }
+}
+
+
+// D論用　消して問題なし
+void mcmpc::SetOptimal(float *opt)
+{
+    for(int i = 0; i < hst_idx->input_by_horizon; i++)
+    {
+        _optimal[i] = opt[i];
+    }
+}
+void mcmpc::WriteIterationResult(int iterations)
+{
+    float Error = 0.0f;
+    fprintf(fp_iteration,"%d ", iterations + 1);
+    for(int i = 0; i < hst_idx->input_by_horizon - 1; i++)
+    {
+        Error = _optimal[i] - mcmpc_input_sequences[i];
+        fprintf(fp_iteration,"%f ", Error);
+    }
+    Error = _optimal[hst_idx->input_by_horizon - 1] - mcmpc_input_sequences[hst_idx->input_by_horizon - 1];
+    fprintf(fp_iteration,"%f\n", Error);
+}
+
+void mcmpc::WriteIterationLast(int iteration, float *input)
+{
+    float Error = 0.0f;
+    fprintf(fp_iteration,"%d ", iteration + 1);
+    for(int i = 0; i < hst_idx->input_by_horizon - 1; i++)
+    {
+        Error = input[i];
+        fprintf(fp_iteration,"%f ", Error);
+    }
+    Error = input[hst_idx->input_by_horizon-1];
+    fprintf(fp_iteration,"%f\n", Error);
 }

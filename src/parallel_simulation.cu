@@ -41,7 +41,10 @@ __global__ void GetWeightFromEliteSample(SampleInfo *info, float *weight_vec, In
     if(id < idx->elite_sample_size)
     {
         float lambda, s_cost;
-        lambda = idx->lambda_gain * info[indices[idx->elite_sample_size - 1]].cost;
+        // lambda = idx->lambda_gain * info[indices[idx->elite_sample_size- 1]].cost;
+        // lambda = idx->lambda_gain * info[indices[50]].cost;
+        lambda = 9 / 5;
+        // lambda = 50;
         s_cost = info[id].cost / lambda;
         info[indices[id]].weight = exp(-s_cost);
         if(isnan(exp(-s_cost)) || isinf(exp(-s_cost)))
