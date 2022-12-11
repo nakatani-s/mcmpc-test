@@ -17,6 +17,8 @@
 #ifndef DATA_STRUCTURES_CUH
 #define DATA_STRUCTURES_CUH
 
+// #define CMA_DEFAULT
+
 struct SampleInfo : public Managed
 {
     float cost;
@@ -28,6 +30,17 @@ struct SampleInfo : public Managed
     DynamicArray dev_ref;
 };
 
+struct SampleInfoCMA : public Managed
+{
+    float cost;
+    float weight;
+    DynamicArray input;
+    DynamicArray dy;
+    DynamicArray dev_input;
+    DynamicArray dev_state;
+    DynamicArray dev_dstate;
+    DynamicArray dev_ref;
+};
 
 typedef struct{
     int horizon;
@@ -69,6 +82,20 @@ typedef struct{
 
 }IndexStructure;
 
+typedef struct
+{
+    int sample_size_cma;
+    int elite_sample_cma;
+    float cma_xi;
+    float cma_chi;
+    float learning_rate_zeta;
+    float learning_rate_c;
+    float learning_rate_muW;
+    float update_rate_top;
+    float update_rate_mu;
+    float damping_ratio;
+}IndexCMA;
+
 enum ValueType{
     SET_STATE, SET_INPUT, SET_PARAMETER, SET_CONSTRAINT, SET_WEIGHT_MATRIX, SET_REFERENCE, SET_COOLING_METHOD, SET_REFERENCE_TYPE, SET_STEP_WIDTH_ADJUSTING_METHOD,
     SET_SOLVER
@@ -97,5 +124,7 @@ enum LinearEquationSolver{
 void SetupIndices(IndexStructure *idx);
 void SetupIndicesSampleBasedNewton(IndexStructure *idx);
 void SetupStructure(SampleInfo *info, int num, IndexStructure *idx);
+void SetupIndicesCMA(IndexCMA *c_idx, IndexStructure *idx);
+void SetupStructureCMA(SampleInfoCMA *cinfo, IndexCMA *c_idx, IndexStructure *idx);
 
 #endif

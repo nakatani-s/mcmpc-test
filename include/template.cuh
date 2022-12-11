@@ -59,6 +59,16 @@ struct OPTIONAL_PARAM
     static const float BARIIER_MAX;
     // 黄金分割探索で使用
     static const int NUM_OF_GOLDEN_SEARCH_ITERATION;
+    // CMA-ES（分散共分散行列適応進化戦略）適用時に使用
+    static const float CMA_XI;
+    // static const float CMA_ZETA;
+    static const int SAMPLE_SIZE_CMA;
+    static const int ELITE_SAMPLE_CMA;
+    static const float LEARNING_RATE_Z;
+    static const float LEARNING_RATE_C;
+    static const float DAMPING_COEFFICIENT;
+    static const float PATH_UPDATE_RATE_Z;
+    static const float PATH_UPDATE_RATE_C;
 };
 
 // 

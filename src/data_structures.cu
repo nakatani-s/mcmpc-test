@@ -117,3 +117,50 @@ void SetupStructure(SampleInfo *info, int num, IndexStructure *idx)
     }
     printf("Success ----- Set up SampleInfo Structure!!! -----\n");
 }
+
+void SetupStructureCMA(SampleInfoCMA *cinfo, IndexCMA *c_idx, IndexStructure *idx)
+{
+    for(int i = 0; i < c_idx->sample_size_cma; i++)
+    {
+        cinfo[i].cost = 0.0;
+        cinfo[i].weight = 0.0;
+        cinfo[i].input = idx->input_by_horizon;
+        cinfo[i].dy = idx->input_by_horizon;
+        cinfo[i].dev_state = idx->dim_of_state;
+        cinfo[i].dev_input = idx->dim_of_input;
+        cinfo[i].dev_ref = idx->dim_of_reference;
+        cinfo[i].dev_dstate = idx->dim_of_state;
+    }
+}
+
+void SetupIndicesCMA(IndexCMA *c_idx, IndexStructure *idx)
+{
+    float l_rate_zeta;
+    float sqrt_input_by_horizon;
+    sqrt_input_by_horizon = sqrt(idx->input_by_horizon);
+    l_rate_zeta = 4.0 / (idx->input_by_horizon + 4);
+// #ifdef CMA_DEFAULT
+    int temp_sample_size;
+    temp_sample_size = (int)(3.0 * log(idx->input_by_horizon));
+
+    c_idx->cma_xi = OPTIONAL_PARAM::CMA_XI;
+    c_idx->sample_size_cma =  (4 + temp_sample_size);
+    c_idx->elite_sample_cma = (int)((4 + temp_sample_size) / 2);
+    c_idx->learning_rate_zeta = l_rate_zeta;
+    c_idx->learning_rate_c = l_rate_zeta;
+    c_idx->update_rate_top = sqrt(l_rate_zeta*(2-l_rate_zeta));
+    c_idx->update_rate_mu = 1.0; //調べて修正
+    c_idx->damping_ratio = (1/l_rate_zeta) + 1;
+    c_idx->cma_chi = sqrt_input_by_horizon *(1 - ( 1 / ( 4 * idx->input_by_horizon ) ) + ( 1 / ( 21 * powf(idx->input_by_horizon,2) ) ) );
+// #else
+//     c_idx->sample_size_cma = OPTIONAL_PARAM::SAMPLE_SIZE_CMA;
+//     c_idx->elite_sample_cma = OPTIONAL_PARAM::ELITE_SAMPLE_CMA;
+//     c_idx->cma_xi = OPTIONAL_PARAM::CMA_XI;
+//     c_idx->learning_rate_zeta = OPTIONAL_PARAM::LEARNING_RATE_Z;
+//     c_idx->learning_rate_c = OPTIONAL_PARAM::LEARNING_RATE_C;
+//     c_idx->update_rate_top = OPTIONAL_PARAM::PATH_UPDATE_RATE_Z;
+//     c_idx->update_rate_mu = OPTIONAL_PARAM::PATH_UPDATE_RATE_C;
+//     c_idx->damping_ratio = OPTIONAL_PARAM::DAMPING_COEFFICIENT;
+//     c_idx->cma_chi = sqrt_input_by_horizon *(1 - ( 1 / ( 4 * hst_idx->input_by_horizon ) ) + ( 1 / ( 21 * powf(hst_idx->input_by_horizon) ) ) );
+// #endif
+}

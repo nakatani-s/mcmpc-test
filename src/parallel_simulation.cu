@@ -29,6 +29,33 @@ __device__ float GenerateRadomInput(unsigned int id, curandState *seed, float me
     return ret_value;
 }
 
+__device__ void GenerateInputCMA(float *input, float *dy, unsigned int id, curandState *seed, float *mean, float *sqrtV, IndexStructure *idx)
+{
+    int input_leading_id;
+    unsigned int shifted_seq_id;
+    unsigned int mat_id;
+    // int ref_leading_id;
+    float temp;
+    for(int t = 0; t < idx->horizon; t++)
+    {
+        input_leading_id = t * idx->dim_of_input;
+        for(int input_id = 0; input_id < idx->dim_of_input; input_id++)
+        {
+            shifted_seq_id = id + input_id *(idx->horizon * idx->dim_of_input);
+            // dy[input_leading_id + input_id] = GenerateRadomInput(shifted_seq_id, seed, 0.0, 1.0);
+            temp = GenerateRadomInput(shifted_seq_id, seed, 0.0, 1.0);
+            for(int sum_id = 0; sum_id < idx->input_by_horizon; sum_id++)
+            {
+                if(input_leading_id + input_id == 0) input[sum_id] = mean[sum_id]; // Initialization
+                mat_id = sum_id * idx->input_by_horizon + (input_leading_id + input_id);
+                dy[sum_id] += sqrtV[mat_id] * temp; 
+                input[sum_id] += sqrtV[mat_id] * temp;
+                // input[sum_id] += sqrtV[mat_id] * dy[input_leading_id + input_id];
+            }
+        }
+    }
+}
+
 __global__ void SetRandomSeed(curandState *random_seed_vec, int seed)
 {
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
@@ -262,6 +289,68 @@ __global__ void ParallelMonteCarloSimulation(SampleInfo *info, float *cost_vec, 
             }
         }
         info[id].cost = total_cost;
+        cost_vec[id] = total_cost;
+        indices[id] = id;
+    }
+}
+
+__global__ void ParallelSimulationCMA(SampleInfoCMA *cinfo, float *cost_vec, int *indices, float *state, float *param, float *ref, float *cnstrnt, float *weight, float *mean, float *sqrtVar, curandState *seed, IndexStructure *idx)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    if(id < idx->sample_size)
+    {
+        unsigned int seq = id;
+        int input_leading_id;
+        int ref_leading_id;
+        // unsigned int shifted_seq_id;
+
+        float stage_cost = 0.0f;
+        float total_cost = 0.0f;
+        float log_barrier_term = 0.0f;
+        float delta_time = idx->prediction_interval / idx->horizon;
+
+        for(int i = 0; i < idx->dim_of_state; i++)
+        {
+            cinfo[id].dev_state[i] = state[i];
+        }
+
+        GenerateInputCMA(cinfo[id].input.d_pointer(), cinfo[id].dy.d_pointer(), seq, seed, mean, sqrtVar, idx);
+        
+        for(int t = 0; t < idx->horizon; t++)
+        {
+            input_leading_id = t * idx->dim_of_input;
+            ref_leading_id = t * idx->dim_of_reference;
+
+            for(int input_id = 0; input_id < idx->dim_of_input; input_id++)
+            {
+                cinfo[id].dev_input[input_id] = cinfo[id].input[input_leading_id + input_id];
+            }
+            // 入力飽和処理
+            InputSaturation(cinfo[id].dev_input.d_pointer(), cnstrnt, idx->zeta);
+            // 1予測ステップ分の予測シミュレーション
+            DynamicalModel(cinfo[id].dev_dstate.d_pointer(), cinfo[id].dev_state.d_pointer(), cinfo[id].dev_input.d_pointer(), param);
+            EularIntegration(cinfo[id].dev_state.d_pointer(), cinfo[id].dev_dstate.d_pointer(), delta_time, idx->dim_of_state);
+            for(int ref_id = 0; ref_id < idx->dim_of_reference; ref_id++)
+            {
+                cinfo[id].dev_ref[ref_id] = ref[ref_leading_id + ref_id];
+            }
+            log_barrier_term = GetBarrierTerm(cinfo[id].dev_state.d_pointer(), cinfo[id].dev_input.d_pointer(), cnstrnt, idx->rho);
+            stage_cost = GetStageCostTerm(cinfo[id].dev_input.d_pointer(), cinfo[id].dev_state.d_pointer(), cinfo[id].dev_ref.d_pointer(), weight);
+            for(int input_id = 0; input_id < idx->dim_of_input; input_id++)
+            {
+                cinfo[id].input[input_leading_id + input_id] = cinfo[id].dev_input[input_id];
+            }
+            total_cost += stage_cost;
+            if(isnan(log_barrier_term))
+            {
+                total_cost += idx->barrier_max;
+            }else if(total_cost - log_barrier_term < 0){
+                total_cost += 1e-2 * idx->rho;
+            }else{
+                total_cost += idx->barrier_tau * idx->rho * log_barrier_term;
+            }
+        }
+        cinfo[id].cost = total_cost;
         cost_vec[id] = total_cost;
         indices[id] = id;
     }
