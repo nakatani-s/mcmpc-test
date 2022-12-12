@@ -36,20 +36,41 @@ __device__ void GenerateInputCMA(float *input, float *dy, unsigned int id, curan
     unsigned int mat_id;
     // int ref_leading_id;
     float temp;
+    // if(id == 0)
+    // {
+    //     for(int row = 0; row < idx->input_by_horizon; row++)
+    //     {
+    //         for(int col = 0; col < idx->input_by_horizon; col++){
+    //             if(col < idx->input_by_horizon){
+    //                 printf("%f ", sqrtV[row*idx->input_by_horizon + col]);
+    //             }else{
+    //                 printf("%f\n", sqrtV[row*idx->input_by_horizon + col]);
+    //             }
+    //         }
+    //     }
+    // }
     for(int t = 0; t < idx->horizon; t++)
     {
         input_leading_id = t * idx->dim_of_input;
         for(int input_id = 0; input_id < idx->dim_of_input; input_id++)
         {
-            shifted_seq_id = id + input_id *(idx->horizon * idx->dim_of_input);
+            // shifted_seq_id = id + input_id *(idx->horizon * idx->dim_of_input);
+            shifted_seq_id = id * (idx->input_by_horizon) + (t * idx->dim_of_input + input_id);
             // dy[input_leading_id + input_id] = GenerateRadomInput(shifted_seq_id, seed, 0.0, 1.0);
             temp = GenerateRadomInput(shifted_seq_id, seed, 0.0, 1.0);
+            // if(input_id == idx->dim_of_input - 1) printf("horizon = %d ::: myid = %d && shifted_id = %d  temp == %f\n", t,id, shifted_seq_id, temp);
             for(int sum_id = 0; sum_id < idx->input_by_horizon; sum_id++)
             {
-                if(input_leading_id + input_id == 0) input[sum_id] = mean[sum_id]; // Initialization
+                if(input_leading_id + input_id == 0) 
+                {
+                    input[sum_id] = mean[sum_id]; // Initialization
+                    dy[sum_id] = 0.0f;
+                }
                 mat_id = sum_id * idx->input_by_horizon + (input_leading_id + input_id);
+                // if(id == 0) printf("sum_id = [%d] <===> mat_id = [%d]\n", sum_id, mat_id);
                 dy[sum_id] += sqrtV[mat_id] * temp; 
                 input[sum_id] += sqrtV[mat_id] * temp;
+                // if(id == 0) printf("sum_id = [%d] <===> mat_id = [%d]  input[%d] [@ %f @]  dy[%d] [@ %f @]\n", sum_id, mat_id, sum_id, input[sum_id], sum_id, dy[sum_id]);
                 // input[sum_id] += sqrtV[mat_id] * dy[input_leading_id + input_id];
             }
         }
@@ -294,10 +315,10 @@ __global__ void ParallelMonteCarloSimulation(SampleInfo *info, float *cost_vec, 
     }
 }
 
-__global__ void ParallelSimulationCMA(SampleInfoCMA *cinfo, float *cost_vec, int *indices, float *state, float *param, float *ref, float *cnstrnt, float *weight, float *mean, float *sqrtVar, curandState *seed, IndexStructure *idx)
+__global__ void ParallelSimulationCMA(SampleInfoCMA *cinfo, float *cost_vec, int *indices, float *state, float *param, float *ref, float *cnstrnt, float *weight, float *mean, float *sqrtVar, curandState *seed, IndexStructure *idx, IndexCMA *cidx)
 {
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
-    if(id < idx->sample_size)
+    if(id < cidx->sample_size_cma)
     {
         unsigned int seq = id;
         int input_leading_id;
@@ -313,8 +334,14 @@ __global__ void ParallelSimulationCMA(SampleInfoCMA *cinfo, float *cost_vec, int
         {
             cinfo[id].dev_state[i] = state[i];
         }
-
+        // if(id == 0) printf("called generated input function in 0 thread\n");
         GenerateInputCMA(cinfo[id].input.d_pointer(), cinfo[id].dy.d_pointer(), seq, seed, mean, sqrtVar, idx);
+        // __syncthreads( );
+        // if(id==0){
+        //     for(int i = 0; i < idx->input_by_horizon; i++){
+        //         if(id%5==0) printf("Generated input[%d] == %f  <==> dy[%d] == %f\n", i, cinfo[id].input[i], i, cinfo[id].dy[i]);
+        //     }
+        // }
         
         for(int t = 0; t < idx->horizon; t++)
         {

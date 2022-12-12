@@ -144,8 +144,10 @@ void SetupIndicesCMA(IndexCMA *c_idx, IndexStructure *idx)
     temp_sample_size = (int)(3.0 * log(idx->input_by_horizon));
 
     c_idx->cma_xi = OPTIONAL_PARAM::CMA_XI;
-    c_idx->sample_size_cma =  (4 + temp_sample_size);
+    // c_idx->sample_size_cma =  (4 + temp_sample_size);
+    c_idx->sample_size_cma = (OPTIONAL_PARAM::SAMPLE_SIZE_CMA > (4 + temp_sample_size)) ? OPTIONAL_PARAM::SAMPLE_SIZE_CMA : (4 + temp_sample_size);
     c_idx->elite_sample_cma = (int)((4 + temp_sample_size) / 2);
+    // c_idx->elite_sample_cma = OPTIONAL_PARAM::ELITE_SAMPLE_CMA;
     c_idx->learning_rate_zeta = l_rate_zeta;
     c_idx->learning_rate_c = l_rate_zeta;
     c_idx->update_rate_top = sqrt(l_rate_zeta*(2-l_rate_zeta));

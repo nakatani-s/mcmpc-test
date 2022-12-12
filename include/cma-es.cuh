@@ -117,6 +117,7 @@ public:
     float UpdateVarianceParam();
     void cmaesFreeArray();
     void ExecuteForwardSimulation(float *state, float *input, IntegralMethod method);
+    void MatrixPrintf(float *mat, int row, int col);
 };
 
 #endif

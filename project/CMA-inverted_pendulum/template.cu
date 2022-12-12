@@ -13,8 +13,8 @@
 #include "../../include/mcmpc_toolkit.cuh"
 
 const int OCP_SETTINGS::SIMULATION_STEPS        = 750;
-const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 25;
-const float OCP_SETTINGS::PREDICTION_INTERVAL   = 0.6f;
+const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 40;
+const float OCP_SETTINGS::PREDICTION_INTERVAL   = 1.2f;
 const float OCP_SETTINGS::CONTROL_CYCLE         = 0.02f;
 const int OCP_SETTINGS::DIM_OF_STATE            = 4;
 const int OCP_SETTINGS::DIM_OF_INPUT            = 1;
@@ -27,7 +27,7 @@ const int OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX    = 5;
 /*****  *****/ 
 const int CONTROLLER_PARAM::NUM_OF_SAMPLE                 = 9000;
 const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 150;
-const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 1;
+const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 4;
 const float CONTROLLER_PARAM::VARIANCE                      = 0.8f;
 
 
@@ -50,9 +50,9 @@ const float OPTIONAL_PARAM::BARIIER_MAX             = 1e7;
 const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 4;
 
 /***** PARAMETERS FOR MPC with CMA-ES  *****/
-const int OPTIONAL_PARAM::SAMPLE_SIZE_CMA       = 100;
-const int OPTIONAL_PARAM::ELITE_SAMPLE_CMA      = 10;
-const float OPTIONAL_PARAM::CMA_XI              = 0.8f;
+const int OPTIONAL_PARAM::SAMPLE_SIZE_CMA       = 40;
+const int OPTIONAL_PARAM::ELITE_SAMPLE_CMA      = 7;
+const float OPTIONAL_PARAM::CMA_XI              = 0.5f;
 const float OPTIONAL_PARAM::LEARNING_RATE_Z     = 1.0f;
 const float OPTIONAL_PARAM::LEARNING_RATE_C     = 1.0f;
 const float OPTIONAL_PARAM::DAMPING_COEFFICIENT = 1.0f;

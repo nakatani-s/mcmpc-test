@@ -25,6 +25,6 @@ __device__ void GenerateInputCMA(float *input, float *dy, unsigned int id, curan
 __global__ void SetRandomSeed(curandState *random_seed_vec, int seed);
 
 __global__ void ParallelMonteCarloSimulation(SampleInfo *info, float *cost_vec, int *indices, float var, float *state, float *param, float *ref, float *cnstrnt, float *weight, float *mean, curandState *seed, IndexStructure *idx);
-__global__ void ParallelSimulationCMA(SampleInfoCMA *info, float *cost_vec, int *indices, float *state, float *param, float *ref, float *cnstrnt, float *weight, float *mean, float *sqrtVar, curandState *seed, IndexStructure *idx);
+__global__ void ParallelSimulationCMA(SampleInfoCMA *info, float *cost_vec, int *indices, float *state, float *param, float *ref, float *cnstrnt, float *weight, float *mean, float *sqrtVar, curandState *seed, IndexStructure *idx, IndexCMA *cidx);
 __global__ void GetWeightFromEliteSample(SampleInfo *info, float *weight_vec, IndexStructure *idx, int *indices);
 __global__ void GetWeightedAverageInParallel(float *ret_value, SampleInfo *info, float *weight, float *denom_vec, int *indices, IndexStructure *idx);

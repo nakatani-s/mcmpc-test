@@ -49,7 +49,7 @@ cma_mpc::cma_mpc()
     cma_xi = cma_idx->cma_xi;
     // Array (or Vector) For CMA-ES Algorithm
     CHECK( cudaMallocManaged((void**)&cma_es_input_sequences, sizeof(float) * hst_idx->input_by_horizon) );
-    CHECK( cudaMalloc(&cma_es_dy, sizeof(float) * hst_idx->input_by_horizon) );
+    CHECK( cudaMallocManaged(&cma_es_dy, sizeof(float) * hst_idx->input_by_horizon) );
     // CHECK( cudaMalloc(&tensort_y_vector, sizeof(float) * cma_idx->sample_size_cma * hst_idx->input_by_horizon) );
     // CHECK( cudaMalloc(&tensort_Pc, sizeof(float) * hst_idx->size_of_hessian) );
     // CHECK( cudaMalloc(&tensort_y, sizeof(float) * hst_idx->size_of_hessian) );
@@ -61,18 +61,18 @@ cma_mpc::cma_mpc()
     SetupVector<<<hst_idx->input_by_horizon,1>>>(path_c, 0.0f);
     CHECK( cudaDeviceSynchronize() );
 
-    CHECK( cudaMalloc(&Variance, sizeof(float) * hst_idx->size_of_hessian) );
+    CHECK( cudaMallocManaged(&Variance, sizeof(float) * hst_idx->size_of_hessian) );
     CHECK( cudaMalloc(&sqrtVariance, sizeof(float) * hst_idx->size_of_hessian) );
     CHECK( cudaMalloc(&inv_sqrtVar, sizeof(float) * hst_idx->size_of_hessian) );
     CHECK( cudaMalloc(&gradient, sizeof(float) * hst_idx->input_by_horizon) );
-    CHECK( cudaMalloc(&eigen_value_vec, sizeof(float) * hst_idx->input_by_horizon) );
+    CHECK( cudaMallocManaged(&eigen_value_vec, sizeof(float) * hst_idx->input_by_horizon) );
 
     // 行列演算用
     CHECK( cudaMalloc(&orth_matrix, sizeof(float) * hst_idx->size_of_hessian) );
 
 
     // SetupIdentityMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(Variance, hst_idx->input_by_horizon, hst_idx->input_by_horizon);
-    SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(Variance, hst_idx->input_by_horizon, hst_idx->input_by_horizon, cma_xi);
+    SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(Variance, hst_idx->input_by_horizon, hst_idx->input_by_horizon, pow(cma_xi,2));
     CHECK(cudaDeviceSynchronize());
     // SetupIdentityMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(sqrtVariance, hst_idx->input_by_horizon, hst_idx->input_by_horizon);
     SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(sqrtVariance, hst_idx->input_by_horizon, hst_idx->input_by_horizon, cma_xi);
@@ -91,6 +91,7 @@ cma_mpc::cma_mpc()
     num_random_seed = cma_idx->sample_size_cma * (hst_idx->dim_of_input + 1) * hst_idx->horizon;
     num_blocks = CountBlocks(cma_idx->sample_size_cma, hst_idx->thread_per_block);
     printf("##### Number of Blocks == [%d] ##### \n", num_blocks);
+    printf("##### Sample size == [%d] #####\n", cma_idx->sample_size_cma);
     thread_per_block = hst_idx->thread_per_block;
     CHECK(cudaMalloc((void**)&dev_random_seed, num_random_seed * sizeof(curandState)));
     SetRandomSeed<<<cma_idx->sample_size_cma, (hst_idx->dim_of_input + 1) * hst_idx->horizon>>>(dev_random_seed, (int) rand() / (time_object->tm_min + 1));
@@ -100,6 +101,7 @@ cma_mpc::cma_mpc()
     CHECK_CUSOLVER( cusolverDnCreate(&cusolverH), "Failed to Create cusolver handler" );
     CHECK_CUBLAS( cublasCreate(&cublasH), "Failed to create cublas handler" );
     uplo = CUBLAS_FILL_MODE_LOWER;
+    jobz = CUSOLVER_EIG_MODE_VECTOR;
     side = CUBLAS_SIDE_LEFT;
     trans = CUBLAS_OP_T;
     trans_no = CUBLAS_OP_N;
@@ -116,7 +118,7 @@ cma_mpc::cma_mpc()
     nrhs = 1;
 
     CHECK( cudaMalloc((void**)&qr_tau, sizeof(float) * hst_idx->size_of_hessian) );
-    CHECK( cudaMalloc((void**)&cu_info, sizeof(int)) );
+    CHECK( cudaMallocManaged((void**)&cu_info, sizeof(int)) );
     
     alpha = 1.0f;
     beta = 0.0f;
@@ -124,7 +126,7 @@ cma_mpc::cma_mpc()
 
     c_sample = new SampleInfoCMA[cma_idx->sample_size_cma + 1];
     SetupStructureCMA(c_sample, cma_idx, hst_idx);
-
+ 
     thrust::host_vector<int> indices_hst_vec_temp( cma_idx->sample_size_cma );
     indices_d_vec_cma = indices_hst_vec_temp;
     thrust::host_vector<float> sort_key_host_vec_tmep(cma_idx->sample_size_cma, 0.0f);
@@ -195,7 +197,7 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
     for(int iter = 0; iter < hst_idx->monte_calro_iteration; iter++)
     {
         ParallelSimulationCMA<<<num_blocks, thread_per_block>>>(c_sample, thrust::raw_pointer_cast(sort_key_d_vec_cma.data()), thrust::raw_pointer_cast(indices_d_vec_cma.data()),
-                                                                 _state, _param, _ref, _cnstrnt, _weight, cma_es_input_sequences, sqrtVariance, dev_random_seed, dev_idx);
+                                                                 _state, _param, _ref, _cnstrnt, _weight, cma_es_input_sequences, sqrtVariance, dev_random_seed, dev_idx, dev_cma_idx);
         CHECK( cudaDeviceSynchronize() );
         
         // 評価値の大小によるThrustを用いたソート
@@ -210,9 +212,9 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
         thrust::inclusive_scan(pow_weight_d_vec_cma.begin(), pow_weight_d_vec_cma.end(), cumsum_pow_weight_d_vec.begin());
         cumsum_pow_weight_h_vec = cumsum_pow_weight_d_vec;
         denom_pow_weight = cumsum_pow_weight_h_vec[cma_idx->elite_sample_cma - 1];
-        GetWeigthedMeanCMA<<<hst_idx->horizon, hst_idx->dim_of_input>>>(cma_es_input_sequences, cma_es_dy, denom_weight, c_sample, thrust::raw_pointer_cast(indices_d_vec_cma.data()), dev_cma_idx, hst_idx);
+        GetWeigthedMeanCMA<<<hst_idx->horizon, hst_idx->dim_of_input>>>(cma_es_input_sequences, cma_es_dy, denom_weight, c_sample, thrust::raw_pointer_cast(indices_d_vec_cma.data()), dev_cma_idx, dev_idx);
         CHECK( cudaDeviceSynchronize() );
-        
+        printf("estimation %d, %d step == %f\n", time_steps, iter, cma_es_input_sequences[0]);
         // c_{mu}の更新 更新式は、[Hansen et al.,14] eq.(51)に記載
         // dev_cma_idx は廃止を検討し、cudaMallocManagedで確保してもよいかも
         cma_idx->update_rate_mu = (1/denom_pow_weight)*(1/(cma_idx->elite_sample_cma*cma_idx->elite_sample_cma));
@@ -224,8 +226,13 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
             alpha_zeta = cma_idx->learning_rate_zeta * (2 - cma_idx->learning_rate_zeta) * (1/denom_pow_weight);
             alpha_zeta = sqrt(alpha_zeta);
             beta_zeta = (1-cma_idx->learning_rate_zeta);
-            CHECK_CUBLAS( cublasSgemv(cublasH, trans_no, row_v, column_v, &alpha_zeta, inv_sqrtVar, row_v, cma_es_dy, column_v, &beta_zeta, path_zeta, column_v), "Failed to update path_{zeta}" );
+            CHECK_CUBLAS( cublasSgemv(cublasH, trans_no, row_v, column_v, &alpha_zeta, inv_sqrtVar, row_v, cma_es_dy, 1, &beta_zeta, path_zeta, 1), "Failed to update path_{zeta}" );
             // 進化パス P_cの更新
+            CHECK( cudaDeviceSynchronize() );
+            printf("cma_dy == \n");
+            MatrixPrintf(cma_es_dy, 1 ,hst_idx->input_by_horizon);
+            printf("path_zeta == \n");
+            MatrixPrintf(path_zeta, 1 ,hst_idx->input_by_horizon);
             alpha_c = cma_idx->learning_rate_c * (2 - cma_idx->learning_rate_c) * (1/denom_pow_weight);
             alpha_c = sqrt(alpha_c);
             GetPathCMA<<<hst_idx->input_by_horizon, 1>>>(path_c, 1-cma_idx->learning_rate_c, alpha_c, cma_es_dy, hst_idx->input_by_horizon);
@@ -235,7 +242,7 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
             // 分散共分散行列の計算
             CovarianceMatrixAdaptation<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(Variance, c_sample, path_c, dev_cma_idx, dev_idx, thrust::raw_pointer_cast(indices_d_vec_cma.data()));
             CHECK( cudaDeviceSynchronize( ) );
-
+            // MatrixPrintf(Variance, hst_idx->input_by_horizon, hst_idx->input_by_horizon);
             if(time_steps == 0)
             {
                 CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, row_v, row_v, Variance, row_v, &geqrf_work_size), "Failed to get buffersize of [CovarianceMatrix] <= 1" );
@@ -247,6 +254,10 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
             }
             // 固有値分解(SVD)を実行 (Variance => 固有ベクトルを格納した行列，eigen_value_vec => 固有値を格納したベクトル)
             CHECK_CUSOLVER( cusolverDnSsyevd(cusolverH, jobz, uplo, row_v, Variance, row_v, eigen_value_vec, ws_svd_ops, hsvd_work_size, cu_info), "Failed to decompose singular value of Covariance" );
+            // cusolverDnSsyevd(cusolverH, jobz, uplo, row_v, Variance, row_v, eigen_value_vec, ws_svd_ops, hsvd_work_size, cu_info);
+            // CHECK( cudaDeviceSynchronize() );
+            // printf("Failed to decompose singular value of Covariance due to devInfo = %d\n", cu_info[0]);
+            // MatrixPrintf(eigen_value_vec, 1, hst_idx->input_by_horizon);
             // sqrtVariance:=対角行列（各要素は分散共分散行列の固有値を並べたもの）
             SetSqrtEigenValToDiagMatrix<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(sqrtVariance, eigen_value_vec);
             CHECK( cudaDeviceSynchronize() );
@@ -269,10 +280,12 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
             cma_xi = cma_idx->cma_xi;
             SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(sqrtVariance, hst_idx->input_by_horizon, hst_idx->input_by_horizon, cma_idx->cma_xi);
             CHECK(cudaDeviceSynchronize());
-            SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(Variance, hst_idx->input_by_horizon, hst_idx->input_by_horizon, cma_idx->cma_xi);
+            SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(Variance, hst_idx->input_by_horizon, hst_idx->input_by_horizon, pow(cma_idx->cma_xi,2));
             CHECK(cudaDeviceSynchronize());
-            SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(inv_sqrtVar, hst_idx->input_by_horizon, hst_idx->input_by_horizon, 1/cma_xi);
+            SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(inv_sqrtVar, hst_idx->input_by_horizon, hst_idx->input_by_horizon, 1/cma_idx->cma_xi);
             CHECK(cudaDeviceSynchronize());
+            // SetupVector<<<hst_idx->input_by_horizon,1>>>(cma_es_input_sequences, 0.0f);
+            // CHECK( cudaDeviceSynchronize() );
             SetupVector<<<hst_idx->input_by_horizon,1>>>(path_zeta, 0.0f);
             CHECK( cudaDeviceSynchronize() );
             SetupVector<<<hst_idx->input_by_horizon,1>>>(path_c, 0.0f);
@@ -293,9 +306,9 @@ float cma_mpc::UpdateVarianceParam()
     {
         p_zeta_norm += path_zeta[i] * path_zeta[i];
     }
-    temp = (p_zeta_norm / cma_idx->cma_chi) - 1;
+    temp = (sqrt(p_zeta_norm) / cma_idx->cma_chi) - 1;
     ret = cma_xi * exp(coefficient * temp);
-    printf("Parameter [xi] = %f\n", ret);
+    printf("Parameter [xi] = %f (%f)\n", ret, p_zeta_norm);
     
     return ret; 
 }
@@ -468,6 +481,22 @@ void cma_mpc::ExecuteForwardSimulation(float *state, float *input, IntegralMetho
 
 }
 
+void cma_mpc::MatrixPrintf(float *mat, int row, int col)
+{
+    for(int i = 0; i < row; i++)
+    {
+        for(int k = 0; k < col; k++)
+        {
+            if(k < col - 1)
+            {
+                printf("%f ", mat[i*row + k]);
+            }else{
+                printf("%f\n", mat[i*row + k]);
+            }
+        }
+    }
+}
+
 
 __global__ void WeightCalculationCMA(SampleInfoCMA *cinfo, float *weight_vec, float *pow_weight_vec, IndexCMA *cidx, IndexStructure *idx, int *indices)
 {
@@ -493,10 +522,10 @@ __global__ void WeightCalculationCMA(SampleInfoCMA *cinfo, float *weight_vec, fl
     }
 }
 
-__global__ void GetWeigthedMeanCMA(float *input_seq, float *dy_seq, float denom, SampleInfoCMA * cinfo, int *indices, IndexCMA *cidx, IndexStructure *idx)
+__global__ void GetWeigthedMeanCMA(float *input_seq, float *dy_seq, float denom, SampleInfoCMA *cinfo, int *indices, IndexCMA *cidx, IndexStructure *idx)
 {
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
-    if(id < idx->horizon * idx->dim_of_input)
+    if(id < idx->input_by_horizon)
     {
         input_seq[id] = 0.0f;
         dy_seq[id] = 0.0f;
@@ -592,9 +621,24 @@ __global__ void SetSqrtEigenValToDiagMatrix(float *Mat, float *Vec)
     {
         if(Vec[threadIdx.x] <= 0)
         {
-            Vec[threadIdx.x] = 0.001f; 
+            float temp;
+            int vec_id;
+            vec_id = 0;
+            temp = Vec[threadIdx.x];
+            while(temp <= 0)
+            {
+                vec_id++;
+                if(vec_id + threadIdx.x < blockDim.x)
+                {
+                    temp = Vec[vec_id + threadIdx.x];
+                }else{
+                    temp = 1.0;
+                }
+            }
+            Mat[id] = sqrt(temp);
+        }else{
+            Mat[id] = sqrt(Vec[threadIdx.x]);
         }
-        Mat[id] = sqrt(Vec[threadIdx.x]);
     }else{
         Mat[id] = 0.0f;
     }
