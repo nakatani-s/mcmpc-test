@@ -13,8 +13,8 @@
 #include "../../include/mcmpc_toolkit.cuh"
 
 const int OCP_SETTINGS::SIMULATION_STEPS        = 750;
-const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 40;
-const float OCP_SETTINGS::PREDICTION_INTERVAL   = 1.2f;
+const int OCP_SETTINGS::NUM_OF_PREDICTION_STEPS = 40; // 40
+const float OCP_SETTINGS::PREDICTION_INTERVAL   = 0.8f; // 0.8f
 const float OCP_SETTINGS::CONTROL_CYCLE         = 0.02f;
 const int OCP_SETTINGS::DIM_OF_STATE            = 6;
 const int OCP_SETTINGS::DIM_OF_INPUT            = 1;
@@ -25,10 +25,10 @@ const int OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX    = 7;
 
 
 /*****  *****/ 
-const int CONTROLLER_PARAM::NUM_OF_SAMPLE                 = 9000;
-const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 150;
-const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 4;
-const float CONTROLLER_PARAM::VARIANCE                      = 0.8f;
+const int CONTROLLER_PARAM::NUM_OF_SAMPLE                 = 6000;
+const int CONTROLLER_PARAM::NUM_OF_ELITE_SAMPLE             = 15;
+const int CONTROLLER_PARAM::NUM_OF_MONTE_CARLO_ITERATION    = 4; // 5
+const float CONTROLLER_PARAM::VARIANCE                      = 2.0f;
 
 
 /***** OPTIONAL PARAMETERS *****/
@@ -37,8 +37,8 @@ const float OPTIONAL_PARAM::LAMBDA_GAIN             = 2e-1;
 
 /***** PARAMETERS FOR SAMPLE-BASED NEWTON METHOD *****/
 const int OPTIONAL_PARAM::NUM_OF_NEWTON_ITERATION   = 1;
-const float OPTIONAL_PARAM::SBNEWTON_VARIANCE       = 0.25f;
-const int OPTIONAL_PARAM::MAX_DIVISOR               = 50;
+const float OPTIONAL_PARAM::SBNEWTON_VARIANCE       = 0.05f; // 0.05
+const int OPTIONAL_PARAM::MAX_DIVISOR               = 10;
 
 const float OPTIONAL_PARAM::COOLING_RATE            = 0.98f;
 
@@ -47,12 +47,12 @@ const float OPTIONAL_PARAM::BARIIER_RHO             = 1e-4;
 const float OPTIONAL_PARAM::BARIIER_TAU             = 1e-2;
 const float OPTIONAL_PARAM::BARIIER_MAX             = 1e7;
 
-const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 4;
+const int OPTIONAL_PARAM::NUM_OF_GOLDEN_SEARCH_ITERATION = 2;
 
 /***** PARAMETERS FOR MPC with CMA-ES  *****/
-const int OPTIONAL_PARAM::SAMPLE_SIZE_CMA       = 40;
-const int OPTIONAL_PARAM::ELITE_SAMPLE_CMA      = 7;
-const float OPTIONAL_PARAM::CMA_XI              = 0.5f;
+const int OPTIONAL_PARAM::SAMPLE_SIZE_CMA       = 1650; // 700
+const int OPTIONAL_PARAM::ELITE_SAMPLE_CMA      = 7;  // 15
+const float OPTIONAL_PARAM::CMA_XI              = sqrt(2.0f); // sqrt(2.0)
 const float OPTIONAL_PARAM::LEARNING_RATE_Z     = 1.0f;
 const float OPTIONAL_PARAM::LEARNING_RATE_C     = 1.0f;
 const float OPTIONAL_PARAM::DAMPING_COEFFICIENT = 1.0f;
@@ -66,9 +66,9 @@ __host__ __device__ void DynamicalModel(float *dx, float *x, float *u, float *pa
     o[0] = sinf(x[2] - x[4]);
     o[1] = -param[2] * o[0] * powf(x[5], 2) - (param[5] + param[6]) * x[3] + param[6] * x[5] + param[3] * param[7] * sinf(x[2]) - param[3] * cosf(x[2]) * u[0];
     o[2] = param[2] * o[0] * powf(x[3], 2) + param[6] * (x[3] - x[5]) + param[4] * param[7] * sinf(x[4]) - param[4] * cosf(x[4]) * u[0];
-    o[3] = param[0] * param[1] - powf(param[2] * cosf(o[2] - o[4]), 2);
+    o[3] = param[0] * param[1] - powf(param[2] * cosf(x[2] - x[4]), 2);
     o[4] = param[1] / o[3];
-    o[5] = -param[2] * cosf(o[2] - o[4]) /o[3];
+    o[5] = -param[2] * cosf(x[2] - x[4]) /o[3];
     o[6] = param[0] / o[3];
     
     dx[0] = x[1]; // dx
@@ -76,7 +76,17 @@ __host__ __device__ void DynamicalModel(float *dx, float *x, float *u, float *pa
     dx[2] = x[3]; // dtheta1
     dx[3] = o[4] * o[1] + o[5] * o[2]; // ddtheta1
     dx[4] = x[5]; // dtheta2
-    dx[5] = o[5] * o[0] + o[6] * o[2];
+    dx[5] = o[5] * o[1] + o[6] * o[2];
+    // if(isnan(dx[5])){
+    //     printf("Singular u[0] = %f o[3] = %f o[2] = %f\n", u[0], o[3], o[2]);
+    //     printf("Singular state state[0]::%f state[2]::%f state[3]::%f\n", x[0], x[2], x[4]);
+    //     // usleep(5000);
+    //     int i = 0;
+    //     while(i < 10000)
+    //     {
+    //         i++;
+    //     }
+    // }
     
 } 
 
@@ -85,14 +95,16 @@ __host__ __device__ float GetStageCostTerm(float *u, float *x, float *reference,
 {
     float stage_cost = 0.0f;
     float o[2] = {};
-    o[0] = sinf(x[2]/2.0f);
-    o[1] = sinf(x[4]/2.0f);
+    o[0] = sinf(x[2]/2.0);
+    o[1] = sinf(x[4]/2.0);
     // 状態に関するステージコスト
     stage_cost += weight[0] * (x[0] - reference[0]) * (x[0] - reference[0]);
     stage_cost += weight[1] * (x[1] - reference[1]) * (x[1] - reference[1]);
     stage_cost += weight[2] * (o[0] - reference[2]) * (o[0] - reference[2]);
+    // stage_cost += weight[2] * (x[2] - reference[2]) * (x[2] - reference[2]);
     stage_cost += weight[3] * (x[3] - reference[3]) * (x[3] - reference[3]);
     stage_cost += weight[4] * (o[1] - reference[4]) * (o[1] - reference[4]);
+    // stage_cost += weight[4] * (x[4] - reference[4]) * (x[4] - reference[4]);
     stage_cost += weight[5] * (x[5] - reference[5]) * (x[5] - reference[5]);
     // 入力に関するステージコスト
     stage_cost += weight[6] * u[0] * u[0];

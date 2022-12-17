@@ -15,12 +15,12 @@ void setParamDoublePend(float *param);
 
 int main(int argc, char **argv)
 {
-    time_t time_value;
-    struct tm *time_object;
-    int before_tm_min;
-    time(&time_value);
-    time_object = localtime( &time_value );
-    before_tm_min = time_object->tm_min;
+    // time_t time_value;
+    // // struct tm *time_object;
+    // // int before_tm_min;
+    // time(&time_value);
+    // time_object = localtime( &time_value );
+    // before_tm_min = time_object->tm_min;
     
     // mcmpc myMPC;
     // sample_based_newton_method myMPC;
@@ -33,15 +33,15 @@ int main(int argc, char **argv)
     // myMPC.Set(EIGEN_VALUE_DECOM, SET_SOLVER);
     // 
     // state:: 6-dimention <==> {z, dot{z}, th1, dot{th1}, th2, dot{th2}}
-    float state[OCP_SETTINGS::DIM_OF_STATE] = {0.0f, 0.0f, M_PI+0.01, 0.0f, M_PI+0.01, 0.0f};
+    float state[OCP_SETTINGS::DIM_OF_STATE] = {0.0f, 0.0f, M_PI, 0.0f, M_PI, 0.0f};
     float u[OCP_SETTINGS::DIM_OF_INPUT] = {0.0f};
     // float param[OCP_SETTINGS::DIM_OF_PARAMETER] = {0.1f, 0.024f, 0.2f, Jp, 1.265f, 1e-6, 9.80665f, -0.25, 0.1, 0.46}; // <== Success 2022.9.1
     // param:: 7-dimention <==> {}
     float param[OCP_SETTINGS::DIM_OF_PARAMETER] = {};
     setParamDoublePend(param);
     // float constraint[OCP_SETTINGS::DIM_OF_CONSTRAINTS] = {-1.0, 1.0, -0.5, 0.5}; // For utlizing collision
-    float constraint[OCP_SETTINGS::DIM_OF_CONSTRAINTS] = {-15.0, 15.0, -0.45, 0.45}; // For predict as constraint 
-    float weight_matrix[OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX] = {2.0f, 0.01f, 2.0f, 0.01f, 2.0f, 0.01f, 0.0001f};
+    float constraint[OCP_SETTINGS::DIM_OF_CONSTRAINTS] = {-25.0, 25.0, -0.5, 0.5}; // For predict as constraint 
+    float weight_matrix[OCP_SETTINGS::DIM_OF_WEIGHT_MATRIX] = {10.0f, 0.01f, 10.0f, 0.01f, 10.0f, 0.01f, 0.01f};
     float reference[OCP_SETTINGS::DIM_OF_REFERENCE] = { };
 
     myMPC.Set(state, SET_STATE);
@@ -55,10 +55,14 @@ int main(int argc, char **argv)
     for(int t = 0; t < OCP_SETTINGS::SIMULATION_STEPS; t++)
     {
         myMPC.ExecuteMPC( u );
-
+        printf("u=%f\n", u[0]);
+        // usleep(2000);
         // sgFilter.Smoothing(u, myMPC.mcmpc_input_sequences);
         // if(t < 10) u[0] = constraint[1];
+        // u[0] = 0.0f;
         myMPC.ExecuteForwardSimulation(state, u, RUNGE_KUTTA_45);
+        // myMPC.ExecuteForwardSimulation(state, u, EULAR);
+
 
         // if(state[0] >= param[8])
         // {
@@ -82,7 +86,7 @@ int main(int argc, char **argv)
         //     state[1] = -coefficient * state[1];
         //     state[0] = param[7];
         // }
-
+        // printf("state[0]::%f  state[2]::%f  state[4]::%f\n", state[0], state[2], state[4]);
         myMPC.Set(state, SET_STATE);
 
         myMPC.WriteDataToFile( );
@@ -107,7 +111,7 @@ void setParamDoublePend(float *param)
     o[1] = 0.078f;      // n1
     o[2] = 0.19f;       // l1
     o[3] = 0.000028f;   // Jn1
-    o[4] = 0.089f;      // I1
+    o[4] = 0.0089f;      // I1
     o[5] = 0.0001f;     // c1
     o[6] = 0.38f;       // L
     o[7] = 0.10f;       // m2

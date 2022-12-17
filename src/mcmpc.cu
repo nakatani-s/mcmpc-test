@@ -259,7 +259,7 @@ void mcmpc::MonteCarloSimulation()
         GetWeightedAverageInParallel<<<hst_idx->dim_of_input, hst_idx->horizon>>>(mcmpc_input_sequences, sample, thrust::raw_pointer_cast(weight_dev_vec.data()),
                                                                                  thrust::raw_pointer_cast(cumsum_weight_dev_vec.data()), thrust::raw_pointer_cast(indices_dev_vec.data()), dev_idx);
         CHECK( cudaDeviceSynchronize() );
-        WriteIterationResult(iter);        
+        // WriteIterationResult(iter);        
     }
 
 }

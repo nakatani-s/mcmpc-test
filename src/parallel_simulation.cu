@@ -89,11 +89,11 @@ __global__ void GetWeightFromEliteSample(SampleInfo *info, float *weight_vec, In
     if(id < idx->elite_sample_size)
     {
         float lambda, s_cost;
-        // lambda = idx->lambda_gain * info[indices[idx->elite_sample_size- 1]].cost;
+        lambda = idx->lambda_gain * info[indices[idx->elite_sample_size- 1]].cost;
         // lambda = idx->lambda_gain * info[indices[50]].cost;
-        lambda = 9 / 5;
+        // lambda = 9 / 5;
         // lambda = 50;
-        s_cost = info[id].cost / lambda;
+        s_cost = info[indices[id]].cost / lambda;
         info[indices[id]].weight = exp(-s_cost);
         if(isnan(exp(-s_cost)) || isinf(exp(-s_cost)))
         {
@@ -288,6 +288,11 @@ __global__ void ParallelMonteCarloSimulation(SampleInfo *info, float *cost_vec, 
                 info[id].dev_ref[ref_id] = ref[ref_leading_id + ref_id];
             }
             InputSaturation(info[id].dev_input.d_pointer(), cnstrnt, idx->zeta);
+            // if(isnan(info[id].dev_dstate[0]) || isnan(info[id].dev_dstate[1]) || isnan(info[id].dev_dstate[2]) || isnan(info[id].dev_dstate[3]) || isnan(info[id].dev_input[0]))
+            // {
+            //     printf("id = %d input[0]::%f mean[0]::%f\n", id, info[id].dev_input[0], mean[input_leading_id]);
+            //     printf("id = %d, dstate[0]::%f dstate[1]::%f dstate[2]::%f dstate[3]::%f\n", id, info[id].dev_dstate[0], info[id].dev_dstate[1], info[id].dev_dstate[2], info[id].dev_dstate[3]);
+            // }
             DynamicalModel(info[id].dev_dstate.d_pointer(), info[id].dev_state.d_pointer(), info[id].dev_input.d_pointer(), param);
             EularIntegration(info[id].dev_state.d_pointer(), info[id].dev_dstate.d_pointer(), delta_time, idx->dim_of_state);
 

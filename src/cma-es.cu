@@ -196,6 +196,11 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
 {
     for(int iter = 0; iter < hst_idx->monte_calro_iteration; iter++)
     {
+        // if(iter == 0)
+        // {
+        //     SetupVector<<<hst_idx->input_by_horizon,1>>>(cma_es_input_sequences, 0.0f);
+        //     CHECK( cudaDeviceSynchronize() );
+        // }
         ParallelSimulationCMA<<<num_blocks, thread_per_block>>>(c_sample, thrust::raw_pointer_cast(sort_key_d_vec_cma.data()), thrust::raw_pointer_cast(indices_d_vec_cma.data()),
                                                                  _state, _param, _ref, _cnstrnt, _weight, cma_es_input_sequences, sqrtVariance, dev_random_seed, dev_idx, dev_cma_idx);
         CHECK( cudaDeviceSynchronize() );
@@ -217,24 +222,27 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
         printf("estimation %d, %d step == %f\n", time_steps, iter, cma_es_input_sequences[0]);
         // c_{mu}の更新 更新式は、[Hansen et al.,14] eq.(51)に記載
         // dev_cma_idx は廃止を検討し、cudaMallocManagedで確保してもよいかも
-        cma_idx->update_rate_mu = (1/denom_pow_weight)*(1/(cma_idx->elite_sample_cma*cma_idx->elite_sample_cma));
+        u_eff = denom_weight/sqrt(denom_pow_weight);
+        cma_idx->update_rate_mu =  u_eff * (1/(cma_idx->elite_sample_cma*cma_idx->elite_sample_cma));
         CHECK( cudaMemcpy(dev_cma_idx, cma_idx, sizeof(IndexCMA), cudaMemcpyHostToDevice) );
 
         if(iter < hst_idx->monte_calro_iteration - 1)
         {
             // 進化パス P_zetaの更新
-            alpha_zeta = cma_idx->learning_rate_zeta * (2 - cma_idx->learning_rate_zeta) * (1/denom_pow_weight);
+            alpha_zeta =  cma_idx->learning_rate_zeta * (2 - cma_idx->learning_rate_zeta) * u_eff;//cma_idx->learning_rate_zeta * (2 - cma_idx->learning_rate_zeta) * (1/denom_pow_weight);
             alpha_zeta = sqrt(alpha_zeta);
+            // alpha_zeta = alpha_zeta * u_eff;
             beta_zeta = (1-cma_idx->learning_rate_zeta);
             CHECK_CUBLAS( cublasSgemv(cublasH, trans_no, row_v, column_v, &alpha_zeta, inv_sqrtVar, row_v, cma_es_dy, 1, &beta_zeta, path_zeta, 1), "Failed to update path_{zeta}" );
             // 進化パス P_cの更新
             CHECK( cudaDeviceSynchronize() );
-            printf("cma_dy == \n");
-            MatrixPrintf(cma_es_dy, 1 ,hst_idx->input_by_horizon);
-            printf("path_zeta == \n");
-            MatrixPrintf(path_zeta, 1 ,hst_idx->input_by_horizon);
-            alpha_c = cma_idx->learning_rate_c * (2 - cma_idx->learning_rate_c) * (1/denom_pow_weight);
+            // printf("cma_dy == \n");
+            // MatrixPrintf(cma_es_dy, 1 ,hst_idx->input_by_horizon);
+            // printf("path_zeta == \n");
+            // MatrixPrintf(path_zeta, 1 ,hst_idx->input_by_horizon);
+            alpha_c =  cma_idx->learning_rate_c * (2 - cma_idx->learning_rate_c) * u_eff;// cma_idx->learning_rate_c * (2 - cma_idx->learning_rate_c) * (1/denom_pow_weight);
             alpha_c = sqrt(alpha_c);
+            // alpha_c = alpha_c * u_eff;
             GetPathCMA<<<hst_idx->input_by_horizon, 1>>>(path_c, 1-cma_idx->learning_rate_c, alpha_c, cma_es_dy, hst_idx->input_by_horizon);
             CHECK(cudaDeviceSynchronize());
             // 分散パラメータzetaの更新
@@ -259,6 +267,9 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
             // printf("Failed to decompose singular value of Covariance due to devInfo = %d\n", cu_info[0]);
             // MatrixPrintf(eigen_value_vec, 1, hst_idx->input_by_horizon);
             // sqrtVariance:=対角行列（各要素は分散共分散行列の固有値を並べたもの）
+            // ikawo matomeru 2022.12.18
+            // SetSqrtEigenValToDiagMatrix<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(sqrtVariance, inv_sqrtVar, eigen_value_vec);
+            // CHECK( cudaDeviceSynchronize() );
             SetSqrtEigenValToDiagMatrix<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(sqrtVariance, eigen_value_vec);
             CHECK( cudaDeviceSynchronize() );
             SetInvSqrtEigenValToDiagMatrix<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(inv_sqrtVar, eigen_value_vec);
@@ -290,6 +301,23 @@ void cma_mpc::CovarianceMatrixAdaptationSampling()
             CHECK( cudaDeviceSynchronize() );
             SetupVector<<<hst_idx->input_by_horizon,1>>>(path_c, 0.0f);
             CHECK( cudaDeviceSynchronize() );
+        }
+        if(2.0 * cma_idx->cma_xi < cma_xi)
+        {
+            cma_xi = cma_idx->cma_xi;
+            SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(sqrtVariance, hst_idx->input_by_horizon, hst_idx->input_by_horizon, cma_idx->cma_xi);
+            CHECK(cudaDeviceSynchronize());
+            SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(Variance, hst_idx->input_by_horizon, hst_idx->input_by_horizon, pow(cma_idx->cma_xi,2));
+            CHECK(cudaDeviceSynchronize());
+            SetupDiagMatrixCMA<<<hst_idx->input_by_horizon, hst_idx->input_by_horizon>>>(inv_sqrtVar, hst_idx->input_by_horizon, hst_idx->input_by_horizon, 1/cma_idx->cma_xi);
+            CHECK(cudaDeviceSynchronize());
+            // SetupVector<<<hst_idx->input_by_horizon,1>>>(cma_es_input_sequences, 0.0f);
+            // CHECK( cudaDeviceSynchronize() );
+            SetupVector<<<hst_idx->input_by_horizon,1>>>(path_zeta, 0.0f);
+            CHECK( cudaDeviceSynchronize() );
+            SetupVector<<<hst_idx->input_by_horizon,1>>>(path_c, 0.0f);
+            CHECK( cudaDeviceSynchronize() );
+            break;
         }
     }
 }
@@ -651,10 +679,26 @@ __global__ void SetInvSqrtEigenValToDiagMatrix(float *Mat, float *Vec)
     {
         if(Vec[threadIdx.x] <= 0)
         {
-            Vec[threadIdx.x] = 0.001f; 
+            float temp;
+            int vec_id;
+            vec_id = 0;
+            temp = Vec[threadIdx.x];
+            while(temp <= 0)
+            {
+                vec_id++;
+                if(vec_id + threadIdx.x < blockDim.x)
+                {
+                    temp = Vec[vec_id + threadIdx.x];
+                }else{
+                    temp = 1.0f;//0.001f;
+                }
+            }
+            Mat[id] = 1 / sqrt(temp);
+        }else{
+            Mat[id] = 1 / sqrt(Vec[threadIdx.x]);
         }
-        Mat[id] = 1 / sqrt(Vec[threadIdx.x]);
     }else{
         Mat[id] = 0.0f;
     }
 }
+

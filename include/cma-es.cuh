@@ -27,6 +27,7 @@ __global__ void GetWeigthedMeanCMA(float *input_seq, float *dy_seq, float denom,
 __global__ void GetPathCMA(float *path, float alpha, float beta, float *dy, int dimention); 
 __global__ void CovarianceMatrixAdaptation(float *Var, SampleInfoCMA *cinfo, float *Pc, IndexCMA *cidx, IndexStructure *idx, int *indices);
 __global__ void SetSqrtEigenValToDiagMatrix(float *Mat, float *Vec);
+// __global__ void SetSqrtEigenValToDiagMatrix(float *Sqrt, float *invSqrt, float *Vec);
 __global__ void SetInvSqrtEigenValToDiagMatrix(float *Mat, float *Vec);
                                                                  
 
@@ -40,6 +41,7 @@ private:
     float alpha_zeta, alpha_c;
     float beta_zeta, beta_c;
     float cma_xi;
+    float u_eff;
     float *Variance, *sqrtVariance, *inv_sqrtVar, *gradient;
     float *eigen_value_vec;
     // float *tensort_y_vector;
